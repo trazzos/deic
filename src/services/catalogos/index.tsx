@@ -1,0 +1,7 @@
+export * from './autoridad'
+export * from './beneficiario'
+export * from './capacitador'
+export * from './departamento'
+export * from './tipoActividad'
+export * from './tipoDocumento'
+export * from './tipoProyecto'
