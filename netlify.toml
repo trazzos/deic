@@ -6,6 +6,9 @@
   NODE_VERSION = "18"
   NEXT_TELEMETRY_DISABLED = "1"
 
+[[plugins]]
+  package = "@netlify/plugin-nextjs"  
+
 [[redirects]]
   from = "/sanctum/csrf-cookie"
   to = "/.netlify/functions/___netlify-server-handler"
