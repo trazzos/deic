@@ -1,6 +1,6 @@
 // app/api/[...path]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-export const dynamic = 'force-dynamic';
+
 // Función auxiliar para manejar la lógica del proxy para todos los métodos HTTP
 // Es mejor tipar el retorno como Promise<NextResponse>
 async function proxyApiRequest(request: NextRequest): Promise<NextResponse> {

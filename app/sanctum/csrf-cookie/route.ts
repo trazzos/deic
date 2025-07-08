@@ -1,7 +1,8 @@
 // app/sanctum/csrf-cookie/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
+   console.log('Entrando a la función /sanctum/csrf-cookie');
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL;
    try {
     const response = await fetch(apiBaseUrl + '/sanctum/csrf-cookie', {
