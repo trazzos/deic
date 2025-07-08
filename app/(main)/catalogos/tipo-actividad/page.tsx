@@ -10,6 +10,7 @@ import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
+import { Dropdown } from 'primereact/dropdown';
 
 import { useAuth } from '@/layout/context/authContext';
 import { useNotification } from '@/layout/context/notificationContext';
@@ -40,6 +41,7 @@ const TipoActividadPage = () => {
     const rowSchema = Yup.object().shape({
         nombre: Yup.string().required('El nombre es obligatorio'),
         descripcion: Yup.string().required('La descripción es obligatorio'),
+        mostrar_en_calendario: Yup.string().required('El campo mostrar en calendario es obligatorio'),
     });
     
 
@@ -86,6 +88,7 @@ const TipoActividadPage = () => {
             id:null,
             nombre: '',
             descripcion: '',
+            mostrar_en_calendario: '',
             keyString:uuid,
         }
         setTipoActividades(prev => [nuevo, ...prev]); 
@@ -170,7 +173,6 @@ const TipoActividadPage = () => {
         const data = e;
         try {
             await rowSchema.validate(data, { abortEarly: false });
-            // Limpia el error si la validación es exitosa
             setRowErrors(prev => ({ ...prev, [data.keyString]: {} }));
             return {};
         } catch (validationError: any) {
@@ -185,7 +187,7 @@ const TipoActividadPage = () => {
                 ...prev,
                 [data.keyString]: fieldErrors
             }));
-            // Evita que la fila salga del modo edición
+           
             setRowsEditing((prev:any) => ({ ...prev, [data.keyString]: true }));
             return fieldErrors;
         }
@@ -206,7 +208,8 @@ const TipoActividadPage = () => {
 
         const contexto = {
             nombre: formulario.nombre,
-            descripcion: formulario.descripcion
+            descripcion: formulario.descripcion,
+            mostrar_en_calendario: formulario.mostrar_en_calendario,
         };
   
         if (!data.id) {
@@ -224,6 +227,12 @@ const TipoActividadPage = () => {
 
                 showError(error.message || 'Error al crear el tipo de actividad');
                 return;
+            } finally {
+                setLoadingSaveRows((prev:any) => {
+                    const newRows = { ...prev };
+                    delete newRows[data.keyString];
+                    return newRows;
+                });
             }
 
         } else {
@@ -241,6 +250,12 @@ const TipoActividadPage = () => {
 
                 showError('Error', error.message || 'Error al actualizar el tipo de actividad');
                 return;
+            } finally {
+                setLoadingSaveRows((prev:any) => {
+                    const newRows = { ...prev };
+                    delete newRows[data.keyString];
+                    return newRows;
+                }); 
             }
         }
             
@@ -347,7 +362,7 @@ const TipoActividadPage = () => {
     )};
 
     const textAreaEditor = (options:any) => (
-         <div>
+         <div className='flex flex-column gap-2 justify-content-start'>
             <InputTextarea
                 className='w-full'
                 value={editBuffer[options.rowData.keyString]?.[options.field] ?? options.value}
@@ -357,6 +372,33 @@ const TipoActividadPage = () => {
                         [options.rowData.keyString]: {
                         ...prev[options.rowData.keyString],
                         [options.field]: e.target.value
+                        }
+                    }));
+                }}
+            />
+           {rowErrors[options.rowData.keyString]?.[options.field] && (
+            <span style={{ color: 'red' }}>
+                { rowErrors[options.rowData.keyString]?.[options.field]}
+            </span>)
+           }
+        </div>
+    );
+
+     const selectMostrarEditor = (options:any) => (
+         <div className='flex flex-column gap-2 align-items-start'>
+            <Dropdown
+                className='w-full'
+                value={editBuffer[options.rowData.keyString]?.[options.field] ?? options.value}
+                options={[
+                    { label: 'Sí', value: 'Si' },
+                    { label: 'No', value: 'No' }
+                ]}  
+                onChange={e => {
+                    setEditBuffer((prev:any) => ({
+                        ...prev,
+                        [options.rowData.keyString]: {
+                            ...prev[options.rowData.keyString],
+                            [options.field]: e.value
                         }
                     }));
                 }}
@@ -449,6 +491,12 @@ const TipoActividadPage = () => {
                             header="Descripción" 
                             editor={(options) => textAreaEditor(options)}
                             style={{ maxWidth: '8rem' }}
+                            />     
+                        <Column 
+                            field="mostrar_en_calendario" 
+                            header="Mostrar en calendario" 
+                            editor={(options) => selectMostrarEditor(options)}
+                            style={{ maxWidth: '2rem' }}
                             />                        
                         <Column 
                             rowEditor

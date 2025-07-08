@@ -16,7 +16,7 @@ import { useNotification } from '@/layout/context/notificationContext';
 
 
 import type { Demo } from '@/types';
-import { AutodidadService } from '@/src/services/catalogos';
+import { AutoridadService } from '@/src/services/catalogos';
 import { generateUUID, extractErrorsFromResponse } from '@/src/utils'
 
 
@@ -101,7 +101,7 @@ const AutoridadPage = () => {
 
         setLoading(true);
 
-        AutodidadService.getListAutoridad().then((response) => {
+        AutoridadService.getListAutoridad().then((response) => {
             const filtrados = response.data.map((autoridad:any) => {
                 return {
                     ...autoridad,
@@ -148,7 +148,7 @@ const AutoridadPage = () => {
 
                     let { data, index } = e;
                     setDeletingRows({ [data.keyString]: true });
-                    const response:any = await AutodidadService.deleteAutoridad(data.id);
+                    const response:any = await AutoridadService.deleteAutoridad(data.id);
                     const createdAutoridad = await response.data;
 
                     updateRows({ ...createdAutoridad, keyString: data.keyString }, index, true);
@@ -212,7 +212,7 @@ const AutoridadPage = () => {
         if (!data.id) {
             try {
 
-               const response:any = await AutodidadService.createAutoridad(contexto);
+               const response:any = await AutoridadService.createAutoridad(contexto);
                const createdAutoridad = await response.data;
 
                updateRows({ ...createdAutoridad, keyString: data.keyString }, index);
@@ -231,7 +231,7 @@ const AutoridadPage = () => {
         } else {
             try {
              
-                const response = await AutodidadService.updateAutoridad(formulario.id,contexto);
+                const response = await AutoridadService.updateAutoridad(formulario.id,contexto);
                 const updatedAutoridad = await response.data;
              
                 updateRows({ ...updatedAutoridad, keyString: data.keyString }, index);

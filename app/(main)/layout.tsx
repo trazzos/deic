@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     title: process.env.NEXT_PUBLIC_TITLE_PAGE,
     description: 'The ultimate collection of design-agnostic, flexible and accessible React UI Components.',
     robots: { index: false, follow: false },
-    viewport: { initialScale: 1, width: 'device-width' },
+    //viewport: { initialScale: 1, width: 'device-width' },
     openGraph: {
         type: 'website',
         title: 'PrimeReact SAKAI-REACT',
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
         icon: '/favicon.ico'
     }
 };
-
+export const viewport = { initialScale: 1, width: 'device-width' };
 export default function AppLayout({ children }: AppLayoutProps) {
     return <Layout>{children}</Layout>;
 }

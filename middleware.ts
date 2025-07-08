@@ -9,21 +9,26 @@ export function middleware(request: NextRequest) {
     if (
         nextUrl.pathname.startsWith('/_next') ||
         nextUrl.pathname.startsWith('/favicon.ico') ||
-        nextUrl.pathname.startsWith('/public') ||
-        nextUrl.pathname.startsWith('/styles') ||
-        nextUrl.pathname.startsWith('/api')
+        nextUrl.pathname.startsWith('/themes') ||
+        nextUrl.pathname.startsWith('/assets') // Permite el acceso a la ruta CSRF de NextAuth
     ) {
         return NextResponse.next();
     }
     // Verifica si la cookie de sesión existe
-    const isAuthenticated = cookies.has('apideic_session'); // O el nombre de tu cookie de sesión
+    const isAuthenticated = cookies.get('apideic_session'); // O el nombre de tu cookie de sesión
 
     // Verifica si la ruta es pública
+
     const isPublic = publicPaths.includes(nextUrl.pathname);
 
-    
-    if (!isPublic && !isAuthenticated) {
-        // Redirige a login si no hay sesión
+    // Si es endpoint de API y no autenticado, responde 401 JSON
+    if (nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+
+   if (!nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
+        //Redirige a login si no hay sesión
         return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
@@ -31,9 +36,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
 }
 
+
 // Configura los matchers para las rutas protegidas
 export const config = {
     matcher: [
-        '/((?!_next|favicon.ico|public|styles|api).*)',
+        '/((?!_next|themes|assets|favicon.ico).*)',
     ],
 }

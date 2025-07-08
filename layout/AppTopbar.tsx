@@ -12,7 +12,7 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
     const { layoutConfig, layoutState, onMenuToggle, showProfileSidebar } = useContext(LayoutContext);
     const menubuttonRef = useRef(null);
     const topbarmenuRef = useRef(null);
-    const topbarmenudetailRef = useRef(null);
+    const topbarmenudetailRef = useRef<Menu>(null);
     const topbarmenubuttonRef = useRef(null);
     const { logout } =  useAuth();
     const router = useRouter();

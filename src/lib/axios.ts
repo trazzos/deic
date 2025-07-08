@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Crea una instancia de Axios
 const http = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL,
+    baseURL:'/',
     withCredentials: true,
     withXSRFToken:true,
     xsrfCookieName: 'XSRF-TOKEN',
