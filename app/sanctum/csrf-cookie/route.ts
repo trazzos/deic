@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
    console.log('Entrando a la función /sanctum/csrf-cookie');
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL;
    try {
+
+    console.log('API Base URL:', apiBaseUrl + '/sanctum/csrf-cookie'); // Para depuración, puedes ver la URL base en la consola
     const response = await fetch(apiBaseUrl + '/sanctum/csrf-cookie', {
       method: 'GET', // Sanctum CSRF cookie es usualmente GET
       headers: {
