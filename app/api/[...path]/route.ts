@@ -25,6 +25,8 @@ async function proxy(request: NextRequest) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
   const url = `${apiBase}/api/${apiPath}${search}`;
 
+  console.log(`Proxying request to: ${url}`);
+
   // Copia headers y cookies
   const headers = new Headers(request.headers);
   headers.delete('host');

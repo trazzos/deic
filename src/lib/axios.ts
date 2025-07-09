@@ -3,6 +3,9 @@ import axios from 'axios';
 // Crea una instancia de Axios
 const http = axios.create({
     baseURL:'/',
+    headers: {
+    'X-Requested-With': 'XMLHttpRequest',
+   },
     withCredentials: true,
     withXSRFToken:true,
     xsrfCookieName: 'XSRF-TOKEN',
