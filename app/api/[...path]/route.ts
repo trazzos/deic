@@ -23,7 +23,7 @@ async function proxy(request: NextRequest) {
   const { pathname, search } = new URL(request.url);
   const apiPath = pathname.replace(/^\/api\//, '');
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
-  const url = `${apiBase}/${apiPath}${search}`;
+  const url = `${apiBase}/api/${apiPath}${search}`;
 
   // Copia headers y cookies
   const headers = new Headers(request.headers);
