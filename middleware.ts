@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Rutas protegidas (puedes ajustar el patrón según tus necesidades)
-const publicPaths = ['/auth/login','/auth/register', '/auth/forgot-password'];
+const publicPaths = ['/api/auth/login','/api/auth/register','/api/auth/forgot-password','/auth/login','/auth/register', '/auth/forgot-password', '/sanctum/csrf-cookie'];
 
 export function middleware(request: NextRequest) {
     const { cookies, nextUrl } = request;
@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
 
     // Si es endpoint de API y no autenticado, responde 401 JSON
     if (nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return NextResponse.json({ error: 'Unauthorized desde nextjs middleware' }, { status: 401 });
     }
 
 
