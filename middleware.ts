@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Rutas protegidas (puedes ajustar el patrón según tus necesidades)
-const publicPaths = ['/auth/login','/auth/register', '/auth/forgot-password', '/sanctum/csrf-cookie'];
+const publicPaths = ['/api/auth/login','/api/auth/register','/api/auth/forgot-password','/auth/login','/auth/register', '/auth/forgot-password', '/sanctum/csrf-cookie'];
 
 export function middleware(request: NextRequest) {
     const { cookies, nextUrl } = request;

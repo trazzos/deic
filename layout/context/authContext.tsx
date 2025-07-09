@@ -37,8 +37,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 setUser(res.user)
             
             setLoading(false);       
-        } catch (error) {
-            console.error('Login error:', error);
+        } catch (error: any) {
+            // Log detallado para depuración de errores de red, CORS, CSRF, etc.
+            if (error.response) {
+                console.error('Login error (response):', {
+                    status: error.response.status,
+                    data: error.response.data,
+                    headers: error.response.headers
+                });
+            } else if (error.request) {
+                console.error('Login error (request, no response):', error.request);
+            } else {
+                console.error('Login error (setup):', error.message);
+            }
             setLoading(false);
             throw error;
         }
@@ -57,8 +68,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     const checkAuth = async () => {
         setLoading(true);
-        try {
+            try {
 
+            await http.get(`/api/debug-session`);
             const res = await http.get(`/api/auth/profile`);
             setUser(res);
 

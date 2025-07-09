@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
     for (const [key, value] of Array.from(response.headers.entries())) {
       if (key.toLowerCase() === 'set-cookie') {
         resHeaders.append('set-cookie', value);
-      } else if (key.toLowerCase() !== 'content-encoding') {
-        // NO reenvíes content-encoding
+      } else if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'content-length') {
+        // NO reenvíes content-encoding ni content-length
         resHeaders.set(key, value);
       }
     }

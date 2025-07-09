@@ -32,6 +32,9 @@ async function proxy(request: NextRequest) {
   headers.delete('host');
   headers.delete('connection');
 
+  // Log headers de request
+  console.log('Request headers to backend:', Object.fromEntries(headers.entries()));
+
   // Reenvía cookies
   const cookie = request.headers.get('cookie');
   if (cookie) headers.set('cookie', cookie);
@@ -39,7 +42,13 @@ async function proxy(request: NextRequest) {
   // Body para métodos que lo requieran
   let body;
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    body = await request.text();
+    try {
+      body = JSON.stringify(await request.json());
+      headers.set('Content-Type', 'application/json');
+    } catch (e) {
+      body = undefined;
+      console.warn('No JSON body found in request.');
+    }
   }
 
   const response = await fetch(url, {
@@ -50,15 +59,19 @@ async function proxy(request: NextRequest) {
     cache: 'no-store',
   });
 
+  // Log headers de response
+  const rawResHeaders = Object.fromEntries(response.headers.entries());
+  console.log('Response headers from backend:', rawResHeaders);
+
   // Reenvía headers y cookies de la respuesta
   const resHeaders = new Headers();
   for (const [key, value] of Array.from(response.headers.entries())) {
     if (key.toLowerCase() === 'set-cookie') {
       resHeaders.append('set-cookie', value);
-    } else if (key.toLowerCase() !== 'content-encoding') {
-        // NO reenvíes content-encoding
-        resHeaders.set(key, value);
-      }
+    } else if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'content-length') {
+      // NO reenvíes content-encoding ni content-length
+      resHeaders.set(key, value);
+    }
   }
 
   return new NextResponse(response.body, {
