@@ -55,9 +55,10 @@ async function proxy(request: NextRequest) {
   for (const [key, value] of Array.from(response.headers.entries())) {
     if (key.toLowerCase() === 'set-cookie') {
       resHeaders.append('set-cookie', value);
-    } else {
-      resHeaders.set(key, value);
-    }
+    } else if (key.toLowerCase() !== 'content-encoding') {
+        // NO reenvíes content-encoding
+        resHeaders.set(key, value);
+      }
   }
 
   return new NextResponse(response.body, {

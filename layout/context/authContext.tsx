@@ -38,6 +38,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             
             setLoading(false);       
         } catch (error) {
+            console.error('Login error:', error);
             setLoading(false);
             throw error;
         }

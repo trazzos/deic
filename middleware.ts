@@ -14,20 +14,25 @@ export function middleware(request: NextRequest) {
     ) {
         return NextResponse.next();
     }
-    
-    const isAuthenticated = cookies.get('apideic_session');
-    const isApi = nextUrl.pathname.startsWith('/api');
+    // Verifica si la cookie de sesión existe
+    const isAuthenticated = cookies.get('apideic_session'); // O el nombre de tu cookie de sesión
 
-    // Si es endpoint de API y no autenticado, responde 401 JSON (no redirige)
-    if (isApi && !isAuthenticated) {
+    // Verifica si la ruta es pública
+
+    const isPublic = publicPaths.includes(nextUrl.pathname);
+
+    // Si es endpoint de API y no autenticado, responde 401 JSON
+    if (nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
         return NextResponse.json({ error: 'Unauthorized desde nextjs middleware' }, { status: 401 });
     }
 
-    // Solo redirige a login en rutas de páginas protegidas
-    if (!isApi && !isAuthenticated) {
+
+   if (!nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
+        //Redirige a login si no hay sesión
         return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
+    // Permite el acceso si hay sesión o la ruta no es protegida
     return NextResponse.next();
 }
 
