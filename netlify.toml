@@ -1,22 +1,22 @@
 [build]
-  command = "npm run build"
-  publish = ".next"
+command = "npm run build"
+publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "18"
-  NEXT_TELEMETRY_DISABLED = "1"
+NODE_VERSION = "18"
+NEXT_TELEMETRY_DISABLED = "1"
 
 [[plugins]]
-  package = "@netlify/plugin-nextjs"  
+package = "@netlify/plugin-nextjs"  
 
 [[redirects]]
-  from = "/sanctum/csrf-cookie"
-  to = "/.netlify/functions/___netlify-server-handler"
-  status = 200
-  force = true
+from = "/sanctum/csrf-cookie"
+to = "/.netlify/functions/___netlify-server-handler"
+status = 200
+force = true
 
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/___netlify-server-handler"
-  status = 200
-  force = true
+from = "/api/*"
+to = "/.netlify/functions/___netlify-server-handler"
+status = 200
+force = true

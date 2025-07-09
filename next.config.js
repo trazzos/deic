@@ -5,7 +5,7 @@ const nextConfig = {
     experimental: {
     missingSuspenseWithCSRBailout: false,
   },
-  async rewrites() {
+  /*async rewrites() {
         return [
             {
                 source: '/sanctum/csrf-cookie',
@@ -16,7 +16,7 @@ const nextConfig = {
                 destination: 'https://deicapi.codisoft.com.mx/api/:path*',
             }
         ]
-    },
+    },*/
 };
 
 
