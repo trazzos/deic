@@ -25,15 +25,9 @@ async function proxy(request: NextRequest) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
   const url = `${apiBase}/api/${apiPath}${search}`;
 
-  console.log(`Proxying request to: ${url}`);
-
-  // Copia headers y cookies
   const headers = new Headers(request.headers);
   headers.delete('host');
   headers.delete('connection');
-
-  // Log headers de request
-  console.log('Request headers to backend:', Object.fromEntries(headers.entries()));
 
   // Reenvía cookies
   const cookie = request.headers.get('cookie');
@@ -47,7 +41,7 @@ async function proxy(request: NextRequest) {
       headers.set('Content-Type', 'application/json');
     } catch (e) {
       body = undefined;
-      console.warn('No JSON body found in request.');
+
     }
   }
 
@@ -59,10 +53,6 @@ async function proxy(request: NextRequest) {
     cache: 'no-store',
   });
 
-  // Log headers de response
-  const rawResHeaders = Object.fromEntries(response.headers.entries());
-  console.log('Response headers from backend:', rawResHeaders);
-
   // Reenvía headers y cookies de la respuesta
   const resHeaders = new Headers();
   for (const [key, value] of Array.from(response.headers.entries())) {
@@ -73,7 +63,6 @@ async function proxy(request: NextRequest) {
       resHeaders.set(key, value);
     }
   }
-
   return new NextResponse(response.body, {
     status: response.status,
     headers: resHeaders,

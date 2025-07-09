@@ -14,9 +14,6 @@ export async function GET(request: NextRequest) {
 
   // Reenvía cookies si existen
   const cookie = request.headers.get('cookie');
-
-  console.log(`Cookie found from function next: ${cookie}`);
-  console.log(`Proxying from function next request to: ${url}`);
   if (cookie) headers.set('cookie', cookie);
 
   try {
@@ -42,8 +39,8 @@ export async function GET(request: NextRequest) {
       status: response.status,
       headers: resHeaders,
     });
+
   } catch (error) {
-    console.error('Error fetching CSRF cookie from function:', error);
     return new NextResponse(JSON.stringify({ message: 'Error fetching CSRF cookie from function.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
