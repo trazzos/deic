@@ -271,6 +271,77 @@ const FormularioActividad = ({
                                     />
                                     {errors.fecha_fin && <small className="p-error">{errors.fecha_fin}</small>}
                                 </div>
+
+                                {/* Nuevos campos de fechas opcionales */}
+                                <div className="col-12 md:col-6 flex flex-column gap-2">
+                                    <label htmlFor="fecha_solicitud_constancia" className="font-medium">Fecha solicitud constancia</label>
+                                    <Calendar
+                                        id="fecha_solicitud_constancia"
+                                        name="fecha_solicitud_constancia"
+                                        value={initialData.fecha_solicitud_constancia ? (typeof initialData.fecha_solicitud_constancia === 'string' ? new Date(initialData.fecha_solicitud_constancia.replace(/-/g, '/')) : initialData.fecha_solicitud_constancia) : null}
+                                        onChange={(e) => setFieldValue(e.target.name, e.value)}
+                                        placeholder="Seleccione fecha"
+                                        showIcon
+                                    />
+                                </div>
+                                <div className="col-12 md:col-6 flex flex-column gap-2">
+                                    <label htmlFor="fecha_envio_constancia" className="font-medium">Fecha envío constancia</label>
+                                    <Calendar
+                                        id="fecha_envio_constancia"
+                                        name="fecha_envio_constancia"
+                                        value={initialData.fecha_envio_constancia ? (typeof initialData.fecha_envio_constancia === 'string' ? new Date(initialData.fecha_envio_constancia.replace(/-/g, '/')) : initialData.fecha_envio_constancia) : null}
+                                        onChange={(e) => setFieldValue(e.target.name, e.value)}
+                                        placeholder="Seleccione fecha"
+                                        showIcon
+                                    />
+                                </div>
+                                <div className="col-12 md:col-6 flex flex-column gap-2">
+                                    <label htmlFor="fecha_vencimiento_envio_encuesta" className="font-medium">Fecha vencimiento envío encuesta</label>
+                                    <Calendar
+                                        id="fecha_vencimiento_envio_encuesta"
+                                        name="fecha_vencimiento_envio_encuesta"
+                                        value={initialData.fecha_vencimiento_envio_encuesta ? (typeof initialData.fecha_vencimiento_envio_encuesta === 'string' ? new Date(initialData.fecha_vencimiento_envio_encuesta.replace(/-/g, '/')) : initialData.fecha_vencimiento_envio_encuesta) : null}
+                                        onChange={(e) => setFieldValue(e.target.name, e.value)}
+                                        placeholder="Seleccione fecha"
+                                        showIcon
+                                    />
+                                </div>
+                                {/* Solo mostrar fecha_envio_encuesta si hay fecha_vencimiento_envio_encuesta y ya se ha enviado */}
+                                {initialData.fecha_vencimiento_envio_encuesta && initialData.fecha_envio_encuesta && (
+                                    <div className="col-12 md:col-6 flex flex-column gap-2">
+                                        <label htmlFor="fecha_envio_encuesta" className="font-medium">Fecha envío encuesta</label>
+                                        <Calendar
+                                            id="fecha_envio_encuesta"
+                                            name="fecha_envio_encuesta"
+                                            value={initialData.fecha_envio_encuesta ? (typeof initialData.fecha_envio_encuesta === 'string' ? new Date(initialData.fecha_envio_encuesta.replace(/-/g, '/')) : initialData.fecha_envio_encuesta) : null}
+                                            onChange={(e) => setFieldValue(e.target.name, e.value)}
+                                            placeholder="Seleccione fecha"
+                                            showIcon
+                                        />
+                                    </div>
+                                )}
+                                <div className="col-12 md:col-6 flex flex-column gap-2">
+                                    <label htmlFor="fecha_inicio_difusion_banner" className="font-medium">Fecha inicio difusión banner</label>
+                                    <Calendar
+                                        id="fecha_inicio_difusion_banner"
+                                        name="fecha_inicio_difusion_banner"
+                                        value={initialData.fecha_inicio_difusion_banner ? (typeof initialData.fecha_inicio_difusion_banner === 'string' ? new Date(initialData.fecha_inicio_difusion_banner.replace(/-/g, '/')) : initialData.fecha_inicio_difusion_banner) : null}
+                                        onChange={(e) => setFieldValue(e.target.name, e.value)}
+                                        placeholder="Seleccione fecha"
+                                        showIcon
+                                    />
+                                </div>
+                                <div className="col-12 md:col-6 flex flex-column gap-2">
+                                    <label htmlFor="fecha_fin_difusion_banner" className="font-medium">Fecha fin difusión banner</label>
+                                    <Calendar
+                                        id="fecha_fin_difusion_banner"
+                                        name="fecha_fin_difusion_banner"
+                                        value={initialData.fecha_fin_difusion_banner ? (typeof initialData.fecha_fin_difusion_banner === 'string' ? new Date(initialData.fecha_fin_difusion_banner.replace(/-/g, '/')) : initialData.fecha_fin_difusion_banner) : null}
+                                        onChange={(e) => setFieldValue(e.target.name, e.value)}
+                                        placeholder="Seleccione fecha"
+                                        showIcon
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -352,6 +423,29 @@ const FormularioActividad = ({
                                         />
                                     </div>
                                     {errors.link_panelista && <small className="p-error">{errors.link_panelista}</small>}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Campo registro_nafin después de enlaces */}
+                        <div className="col-12 mb-4">
+                            <div className="p-3 border-round bg-cyan-50 dark:bg-cyan-900 mb-3">
+                                <h2 className="text-lg font-semibold text-cyan-800 dark:text-cyan-100 m-0">
+                                    Registro NAFIN
+                                </h2>
+                            </div>
+                            <div className="grid">
+                                <div className="col-12 flex flex-column gap-2">
+                                    <label htmlFor="registro_nafin" className="font-medium">Registro NAFIN</label>
+                                    <InputText
+                                        id="registro_nafin"
+                                        name="registro_nafin"
+                                        value={initialData.registro_nafin || ''}
+                                        onChange={(e) => setFieldValue(e.target.name, e.target.value)}
+                                        className={errors.registro_nafin ? 'p-invalid' : ''}
+                                        placeholder="Registro NAFIN (opcional)"
+                                    />
+                                    {errors.registro_nafin && <small className="p-error">{errors.registro_nafin}</small>}
                                 </div>
                             </div>
                         </div>

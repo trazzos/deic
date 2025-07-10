@@ -70,14 +70,22 @@ export const ProyectoService = {
     deleteTareaPorActividadUuid(proyectoUuid:string, actividadUuid:string, id:number) {
         return http.delete(`/api/proyectos/${proyectoUuid}/actividades/${actividadUuid}/tareas/${id}`);
     },
-    // creame los endpoints para los documentos de la actividad son los scope bindings que venimos usando en actividades
+    
     getListaDocumentosPorActividadUuid(proyectoUuid:string, actividadUuid:string) {
         return http.get(`/api/proyectos/${proyectoUuid}/actividades/${actividadUuid}/archivos`);
     },
+
     createDocumentoPorActividadUuid(proyectoUuid:string, actividadUuid:string, contexto:any) {
         return http.post(`/api/proyectos/${proyectoUuid}/actividades/${actividadUuid}/archivos`, contexto);
     }, 
+
     deleteDocumentoPorActividadUuid(proyectoUuid:string, actividadUuid:string, uuid:string) {
         return http.delete(`/api/proyectos/${proyectoUuid}/actividades/${actividadUuid}/archivos/${uuid}`);
-    }
+    },
+
+    downloadDocumentoPorActividadUuid(proyectoUuid:string, actividadUuid:string, uuid:string): Promise<any> {
+        return http.get(`/api/proyectos/${proyectoUuid}/actividades/${actividadUuid}/archivos/${uuid}/descargar`, {
+            responseType: 'blob' // Asegúrate de que la respuesta sea un blob
+        });
+    },
 };

@@ -34,7 +34,6 @@ const AppMenu = () => {
                     ],
                 },
                 { label: 'Roles de usuario', icon: 'pi pi-fw pi-key', to: '/roles' },
-                { label: 'Cuentas de usuario', icon: 'pi pi-fw pi-shield', to: '/cuentas'},
                 { label: 'Personas', icon: 'pi pi-fw pi-users', to: '/personas'},
             ]
         },

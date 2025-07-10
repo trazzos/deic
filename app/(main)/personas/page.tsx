@@ -89,6 +89,10 @@ const PersonasPage = () => {
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
 
+    // Filtros personalizados
+    const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
+    const [filtroDepartamento, setFiltroDepartamento] = useState<number | null>(null);
+
     useEffect(() => {
         setLoading(true);
         DepartamentoService.getListDepartamento()
@@ -274,45 +278,56 @@ const PersonasPage = () => {
             <h5 className="m-0">{formularioPersona?.id ? 'Actualizar información' : 'Nuevo registro'}</h5>
         </div>
     );
-    
 
     const renderHeader = () => {
-           return (
-               <div className="flex flex-column md:flex-row justify-content-between gap-1">
-                       <div className="flex flex-auto gap-2 ">
-                           <Button type="button" icon="pi pi-filter-slash" label="Limpiar" outlined onClick={clearFilter} />
-                       <span className="p-input-icon-left">
-                           <i className="pi pi-search" />
-                           <InputText value={globalFilterValue} onChange={onGlobalFilterChange} placeholder="Busqueda por palabras" />
-                       </span>
-                       </div>
-                       <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                           <Button
-                               className="w-auto" 
-                               type="button" 
-                               icon="pi pi-plus" 
-                               label="Agregar" 
-                               onClick={onAgregar}/>
-                       </div>
-               </div>
-           );
-    };
-    const actionsTemplate = (rowData:any, options:any, customHandlers:any) => (
-            <div className="flex align-items-center justify-content-center gap-2">
-                <Button
-                    icon="pi pi-pencil" 
-                    size='small'
-                    onClick={() => customHandlers.onEdit({ data: rowData, index: options.rowIndex })} 
-                />
-                <Button
-                    icon="pi pi-trash" 
-                    size='small'
-                    severity='danger'
-                    loading={deletingRows[rowData.keyString]}
-                    onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                />
+        return (
+            <div className="flex flex-column md:flex-row justify-content-between gap-2">
+                <div className="flex flex-auto gap-2 ">
+                    <Button type="button" icon="pi pi-filter-slash" label="Limpiar" outlined onClick={clearFilter} />
+                    <span className="p-input-icon-left">
+                        <i className="pi pi-search" />
+                        <InputText value={globalFilterValue} onChange={onGlobalFilterChange} placeholder="Buscar por nombre" />
+                    </span>
+                    <Dropdown
+                        value={filtroDepartamento}
+                        options={[{ label: 'Todos los departamentos', value: null }, ...departamentos.map(d => ({ label: d.nombre, value: d.id }))]}
+                        onChange={e => setFiltroDepartamento(e.value)}
+                        placeholder="Departamento"
+                        className="w-14rem"
+                    />
+                    <Dropdown
+                        value={filtroUsuario}
+                        options={[
+                            { label: '¿Cuenta de usuario?', value: null },
+                            { label: 'Sí', value: 'si' },
+                            { label: 'No', value: 'no' },
+                        ]}
+                        onChange={e => setFiltroUsuario(e.value)}
+                        placeholder="¿Cuenta de usuario?"
+                        className="w-12rem"
+                    />
+                </div>
+                <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
+                    <Button
+                        className="w-auto"
+                        type="button"
+                        icon="pi pi-plus"
+                        label="Agregar"
+                        onClick={onAgregar}
+                    />
+                </div>
             </div>
-    );
+        );
+    };
+
+    // Filtro aplicado a la tabla
+    const personasFiltradas = personas.filter((p) => {
+        const nombreCompleto = `${p.nombre} ${p.apellido_paterno} ${p.apellido_materno}`.toLowerCase();
+        const nombreMatch = globalFilterValue ? nombreCompleto.includes(globalFilterValue.toLowerCase()) : true;
+        const depMatch = filtroDepartamento ? p.departamento_id === filtroDepartamento : true;
+        const usuarioMatch = filtroUsuario === 'si' ? !!p.email : filtroUsuario === 'no' ? !p.email : true;
+        return nombreMatch && depMatch && usuarioMatch;
+    });
 
     const bodyNombre = (rowData:Persona) => {  
         return (
@@ -330,51 +345,103 @@ const PersonasPage = () => {
         );
     }
 
+    const bodyCuentaUsuario = (rowData: Persona) => {
+        const tieneCuenta = !!rowData.email;
+        return (
+            <Tag
+                value={tieneCuenta ? 'Sí' : 'No'}
+                severity={tieneCuenta ? 'success' : undefined}
+                className={tieneCuenta ? '' : 'surface-200 text-900 border-none'}
+                style={{ fontSize: '1rem', minWidth: 32, textAlign: 'center' }}
+            />
+        );
+    };
+
+    const handleConfigurarUsuario = (rowData: Persona) => {
+        // Aquí puedes abrir un modal o sidebar para configurar usuario
+        alert(`Configurar usuario para: ${rowData.nombre} ${rowData.apellido_paterno}`);
+    };
+
+    const actionsTemplate = (rowData:any, options:any, customHandlers:any) => {
+        const tieneCuenta = !!rowData.email;
+        return (
+            <div className="flex align-items-center justify-content-center gap-2">
+                <Button
+                    icon="pi pi-pencil"
+                    size='small'
+                    onClick={() => customHandlers.onEdit({ data: rowData, index: options.rowIndex })}
+                />
+                <Button
+                    icon="pi pi-trash"
+                    size='small'
+                    severity='danger'
+                    loading={deletingRows[rowData.keyString]}
+                    onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })}
+                />
+                <Button
+                    icon="pi pi-user"
+                    size="small"
+                    severity={tieneCuenta ? 'success' : undefined}
+                    className={tieneCuenta ? '' : 'surface-200 text-900 border-none'}
+                    tooltip="Configurar usuario"
+                    tooltipOptions={{ position: 'top' }}
+                    onClick={() => handleConfigurarUsuario(rowData)}
+                />
+            </div>
+        );
+    };
 
     return (
         <div className="grid">
             <div className="col-12">
-                <div className="card">
-                    <h5>Lista de personas</h5>
+                <div className="card border-round-xl shadow-2 bg-white">
+                    <h5 className="mb-4 text-primary-800 font-bold">Lista de personas</h5>
                     <DataTable
-                        value={personas}
+                        value={personasFiltradas}
                         paginator
                         rows={25}
                         dataKey="id"
-                        filters={filters}
-                        filterDisplay="menu"
                         loading={loading}
                         emptyMessage="No se encontraron registros."
                         editMode='row'
                         header={renderHeader()}
+                        className="p-datatable-sm border-none shadow-none"
+                        style={{ borderRadius: '1rem' }}
                     >
-                        <Column 
+                        <Column
                             body={bodyNombre}
-                            header="Nombre" 
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} />
-                        
-                        <Column 
-                            field="nombre_departamento" 
-                            header="Departamento" 
-                            filter 
-                            filterPlaceholder="Busqueda por departamento" 
-                            style={{ maxWidth: '4rem' }} />
-
-                        <Column 
+                            header="Nombre"
+                            filter
+                            filterPlaceholder="Buscar por nombre"
+                            style={{ minWidth: '10rem' }}
+                        />
+                        <Column
+                            field="nombre_departamento"
+                            header="Departamento"
+                            filter
+                            filterPlaceholder="Buscar por departamento"
+                            style={{ minWidth: '8rem' }}
+                        />
+                        <Column
                             body={bodyEsResponsable}
                             bodyClassName="text-center"
-                            header="Responsable de departamento" 
-                            style={{ maxWidth: '4rem' }} />
-                        
-                        <Column 
+                            header="Responsable de departamento"
+                            style={{ minWidth: '8rem' }}
+                        />
+                        <Column
+                            body={bodyCuentaUsuario}
+                            bodyClassName="text-center"
+                            header="Cuenta de usuario"
+                            style={{ minWidth: '8rem' }}
+                        />
+                        <Column
                             body={(rowData, options) => actionsTemplate(rowData, options, {
-                                onEdit:handleEditPersona,
-                                onDelete:handleDeletePersona
+                                onEdit: handleEditPersona,
+                                onDelete: handleDeletePersona,
                             })}
-                            bodyClassName="text-center" 
-                            style={{ maxWidth: '2rem' }} />
+                            bodyClassName="text-center"
+                            style={{ minWidth: '7rem' }}
+                        />
                     </DataTable>
                 </div>
                 <Sidebar 

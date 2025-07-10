@@ -16,6 +16,7 @@ interface RepositorioDocumentosProps {
     visible: boolean;
     onHide: () => void;
     actividad: any;
+    tiposDocumento: any[];
     onUploadDocument?: (file: File, tipoDocumento: any) => Promise<void>;
     onDeleteDocument?: (documento: any) => Promise<void>;
     onDownloadDocument?: (documento: any) => void;
@@ -25,11 +26,11 @@ const RepositorioDocumentos = ({
     visible,
     onHide,
     actividad,
+    tiposDocumento,
     onUploadDocument,
     onDeleteDocument,
     onDownloadDocument
 }: RepositorioDocumentosProps) => {
-    const [tiposDocumento, setTiposDocumento] = useState<any[]>([]);
     const [selectedTipo, setSelectedTipo] = useState<any>(null);
     const [documentos, setDocumentos] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -39,22 +40,9 @@ const RepositorioDocumentos = ({
 
     useEffect(() => {
         if (visible) {
-            loadTiposDocumento();
             loadDocumentos();
         }
     }, [visible]);
-
-    const loadTiposDocumento = async () => {
-        try {
-            setLoading(true);
-            const response = await TipoDocumentoService.getListTipoDocumento();
-            setTiposDocumento(response.data);
-        } catch (error) {
-            console.error('Error cargando tipos de documento:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const loadDocumentos = async () => {
         try {
@@ -134,6 +122,7 @@ const RepositorioDocumentos = ({
                     size="small"
                     onClick={() => handleDownload(rowData)}
                     tooltip="Descargar"
+                    tooltipOptions={{ position: 'left' }}
                 />
                 <Button
                     icon="pi pi-trash"
@@ -142,6 +131,7 @@ const RepositorioDocumentos = ({
                     severity="danger"
                     size="small"
                     onClick={() => handleDelete(rowData)}
+                    tooltipOptions={{ position: 'left' }}
                     tooltip="Eliminar"
                 />
             </div>
@@ -158,8 +148,12 @@ const RepositorioDocumentos = ({
     };
 
     const fechaBodyTemplate = (rowData: any) => {
-        return rowData.fecha_subida 
-            ? new Date(rowData.fecha_subida).toLocaleDateString()
+        return rowData.fecha_creacion
+            ? new Date(rowData.fecha_creacion).toLocaleDateString('es-ES', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              }).replace('.', '')
             : 'No disponible';
     };
 
@@ -350,13 +344,13 @@ const RepositorioDocumentos = ({
                                 <Column 
                                     field="nombre_original" 
                                     header="Archivo"
-                                    style={{ minWidth: '150px' }}
+                                    style={{ minWidth: '250px' }}
                                 />
                                 <Column 
                                     field="tipo" 
                                     header="Tipo documento"
                                     body={tipoDocumentoBodyTemplate}
-                                    style={{ width: '120px' }}
+                                    style={{ width: '200px' }}
                                 />
                                 <Column 
                                     field="tamanio" 
@@ -365,7 +359,7 @@ const RepositorioDocumentos = ({
                                     style={{ width: '80px' }}
                                 />
                                 <Column 
-                                    field="created_at" 
+                                    field="fecha_creacion" 
                                     header="Fecha"
                                     body={fechaBodyTemplate}
                                     style={{ width: '100px' }}

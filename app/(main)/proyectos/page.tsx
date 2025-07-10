@@ -16,6 +16,7 @@ import { DataScroller } from 'primereact/datascroller';
 import { 
     DepartamentoService, 
     TipoProyectoService,
+    TipoDocumentoService,
     ProyectoService, 
     TipoActividadService, 
     PersonaService, 
@@ -58,7 +59,6 @@ const schemaActividad = Yup.object().shape({
     fecha_envio_constancia: Yup.date().nullable(),
     fecha_vencimiento_envio_encuesta: Yup.date().nullable(),
     fecha_envio_encuesta: Yup.date().nullable(),
-    fecha_copy_creativo: Yup.date().nullable(),
     fecha_inicio_difusion_banner: Yup.date().nullable(),
     fecha_fin_difusion_banner: Yup.date().nullable(),
     link_registro: Yup.string().url('Debe ser una URL válida').nullable(),
@@ -99,6 +99,7 @@ const ProyectoPage = () => {
     const [proyectos, setProyectos] = useState<any[]>([]);
     const [departamentos, setDepartamentos] = useState<any[]>([]);
     const [tiposProyecto, setTiposProyecto] = useState<any[]>([]);
+    const [tiposDocumento, setTiposDocumento] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingGuardar, setLoadingGuardar] = useState(false);
     const [loadingGuardarActividad, setLoadingGuardarActividad] = useState(false);
@@ -364,7 +365,7 @@ const ProyectoPage = () => {
         }
     };
     
-    // Handlers
+    // Handlers proyectos
     const handleFormularioChange = (e: any) => {
 
         const name = e.target?.name ?? e.originalEvent?.target?.name;
@@ -454,6 +455,114 @@ const ProyectoPage = () => {
         });
     }
 
+    const onAgregar = () => {
+
+      setFormularioProyecto(initStateFormularioProyecto);  
+      setVisibleFormulario(true);  
+    }
+
+    const loadMoreProyectos = async () => {
+
+        if (!hasMore || loading) return;
+
+        setLoading(true);
+
+        try {
+                const response = await ProyectoService.paginateProyecto(page + 1, perPage);
+                if (response.data.length === 0) {
+                    setHasMore(false);
+                } else {
+                    setProyectos(prev => [...prev, ...response.data]);
+                    setPage(prev => prev + 1);
+                }
+            } finally {
+                setLoading(false);
+            }
+    };
+
+    const handleResetControlsProyecto  = () => {
+        setFormularioProyecto(initStateFormularioProyecto);
+        setFormularioErrors({});
+        setVisibleFormulario(false);
+        setProyectoActivo({});
+    };
+
+    const onEditProyecto = (e:any) => {
+
+        const data = e.data;
+        setFormularioProyecto((_prev:any) => ({
+            uuid:data.uuid,
+            tipoProyecto:data.tipo_proyecto_id,
+            departamento: data.departamento_id,
+            nombre:data.nombre,
+            descripcion: data.descripcion
+        }));
+        setVisibleFormulario(true);
+       
+    };
+
+    const onSelectProyecto = async (proyecto:any) => {
+       
+        const data = proyecto;
+        setProyectoActivo(data);
+        setOpenPanelProyecto(true);
+        setOpenPanelActividad(false);
+        setShowDetailPanel(true); // Show the detail panel when a project is selected
+        
+        // Verificar si ya tenemos las actividades en caché
+        const actividadesEnCache = actividadesPorProyecto[data.uuid];
+        
+        if (actividadesEnCache) {
+            // Usar datos del caché
+            setActividades(actividadesEnCache);
+            loadTareasFromCache(data.uuid);
+            setLoadingActividadesProyecto(false);
+        } else {
+            // Cargar desde el servidor y guardar en caché
+            setLoadingActividadesProyecto(true);
+            try {
+                const responseActividades = await ProyectoService.getListaActividadesPorProyectoUuid(data?.uuid);
+                const nuevasActividades = responseActividades.data;
+                
+                setActividades(nuevasActividades);
+                updateActividadesCache(data.uuid, nuevasActividades);
+                
+                // Limpiar tareas del proyecto activo
+                setTareasPorActividad({});
+            } catch (error) {
+                console.error('Error al cargar actividades:', error);
+            } finally {
+                setLoadingActividadesProyecto(false);
+            }
+        }
+    };
+
+    const updateRows = (data:any, isDelete:boolean=false) => {
+        setProyectos((prev:any) => {
+            let updatedProyectos = [...prev];
+            const index = updatedProyectos.findIndex((pro) => pro.uuid === data.uuid);
+
+            if(isDelete) {
+                updatedProyectos = updatedProyectos.filter((_proyecto:any, idx:any) => index !== idx)
+            } else {
+                if(index !== -1) {
+                    updatedProyectos[index] = {
+                        ...data,
+                    }; 
+                } else {
+                    updatedProyectos = [...updatedProyectos, data];
+                }
+            }
+            // Si el proyecto actualizado es el activo, actualizar también el estado
+            if (proyectoActivo?.uuid === data.uuid) {
+                setProyectoActivo((prev:any) => ({ ...prev, ...data }));
+                setFormularioProyecto((prev:any) => ({ ...prev, ...data }));
+            }
+            return updatedProyectos;
+        });
+    }
+
+    // handlers actividades
     const handleSaveDataActividad = async () => {   
         
         setLoadingGuardarActividad(true);
@@ -565,38 +674,6 @@ const ProyectoPage = () => {
         });
     }
 
-    const onAgregar = () => {
-
-      setFormularioProyecto(initStateFormularioProyecto);  
-      setVisibleFormulario(true);  
-    }
-
-    const loadMoreProyectos = async () => {
-
-        if (!hasMore || loading) return;
-
-        setLoading(true);
-
-        try {
-                const response = await ProyectoService.paginateProyecto(page + 1, perPage);
-                if (response.data.length === 0) {
-                    setHasMore(false);
-                } else {
-                    setProyectos(prev => [...prev, ...response.data]);
-                    setPage(prev => prev + 1);
-                }
-            } finally {
-                setLoading(false);
-            }
-    };
-
-    const handleResetControlsProyecto  = () => {
-        setFormularioProyecto(initStateFormularioProyecto);
-        setFormularioErrors({});
-        setVisibleFormulario(false);
-        setProyectoActivo({});
-    }
-
     const handleResetControlsActividad = () => {
 
         setActividades([]);
@@ -615,6 +692,9 @@ const ProyectoPage = () => {
             try {
                 const responseDepartamentos = await DepartamentoService.getListDepartamento();
                 setDepartamentos(responseDepartamentos.data);
+
+                const responseTiposDocumento = await TipoDocumentoService.getListTipoDocumento();
+                setTiposDocumento(responseTiposDocumento.data);
 
                 const responseTiposProyecto = await TipoProyectoService.getListTipoProyecto();
                 setTiposProyecto(responseTiposProyecto.data);
@@ -658,33 +738,8 @@ const ProyectoPage = () => {
         });
     }
 
-    const updateRows = (data:any, isDelete:boolean=false) => {
-
-        setProyectos((prev:any) => {
-
-            let updatedProyectos = [...prev];
-            const index = updatedProyectos.findIndex((pro) => pro.uuid === data.uuid);
-
-            if(isDelete) {
-                updatedProyectos = updatedProyectos.filter((_proyecto:any, idx:any) => index !== idx)
-            } else {
-                if(index !== -1) {
-                    updatedProyectos[index] = {
-                        ...data,
-                    }; 
-                } else {
-                    updatedProyectos = [...updatedProyectos, data];
-                }
-                
-            }
-            return updatedProyectos;
-        });
-    }
-
     const updateActividades = (data:any, isDelete:boolean=false) => {
-
         setActividades((prev:any) => {
-
             let updatedActividades = [...prev];
             const index = updatedActividades.findIndex((actividad) => actividad.uuid === data.uuid);
 
@@ -698,67 +753,19 @@ const ProyectoPage = () => {
                 } else {
                     updatedActividades = [...updatedActividades, data];
                 }
-                
             }
-            
             // Actualizar caché de actividades
             if (proyectoActivo?.uuid) {
                 updateActividadesCache(proyectoActivo.uuid, updatedActividades);
             }
-            
+            // Si la actividad actualizada es la seleccionada, actualizar también el estado
+            if (actividadSeleccionada?.uuid === data.uuid) {
+                setActividadSeleccionada((prev:any) => ({ ...prev, ...data }));
+                setFormularioActividad((prev:any) => ({ ...prev, ...data }));
+            }
             return updatedActividades;
         });
     }
-
-    const onEditProyecto = (e:any) => {
-
-        const data = e.data;
-        setFormularioProyecto((_prev:any) => ({
-            uuid:data.uuid,
-            tipoProyecto:data.tipo_proyecto_id,
-            departamento: data.departamento_id,
-            nombre:data.nombre,
-            descripcion: data.descripcion
-        }));
-        setVisibleFormulario(true);
-       
-    };
-
-    const onSelectProyecto = async (proyecto:any) => {
-       
-        const data = proyecto;
-        setProyectoActivo(data);
-        setOpenPanelProyecto(true);
-        setOpenPanelActividad(false);
-        setShowDetailPanel(true); // Show the detail panel when a project is selected
-        
-        // Verificar si ya tenemos las actividades en caché
-        const actividadesEnCache = actividadesPorProyecto[data.uuid];
-        
-        if (actividadesEnCache) {
-            // Usar datos del caché
-            setActividades(actividadesEnCache);
-            loadTareasFromCache(data.uuid);
-            setLoadingActividadesProyecto(false);
-        } else {
-            // Cargar desde el servidor y guardar en caché
-            setLoadingActividadesProyecto(true);
-            try {
-                const responseActividades = await ProyectoService.getListaActividadesPorProyectoUuid(data?.uuid);
-                const nuevasActividades = responseActividades.data;
-                
-                setActividades(nuevasActividades);
-                updateActividadesCache(data.uuid, nuevasActividades);
-                
-                // Limpiar tareas del proyecto activo
-                setTareasPorActividad({});
-            } catch (error) {
-                console.error('Error al cargar actividades:', error);
-            } finally {
-                setLoadingActividadesProyecto(false);
-            }
-        }
-    };
 
     const seleccionarActividad = (actividad: any) => {
        
@@ -1022,20 +1029,107 @@ const ProyectoPage = () => {
 
     const handleDownloadDocumento = (documento: any) => {
         try {
-            // Si tienes una URL directa, úsala
-            if (documento.url) {
-                window.open(documento.url, '_blank');
-            } else {
-                // Si necesitas obtener la URL del servidor
-                // const downloadUrl = await DocumentoService.getDownloadUrl(documento.id);
-                // window.open(downloadUrl, '_blank');
-                console.log('Descargando documento:', documento.nombre_original);
-            }
+
+            //la api regresa un streamDownload
+            ProyectoService.downloadDocumentoPorActividadUuid(actividadSeleccionada.proyecto_uuid, actividadSeleccionada.uuid, documento.uuid)
+                .then((response) => {
+                    const url = window.URL.createObjectURL(new Blob([response]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', documento.nombre_original);
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                })
+                .catch((error) => {
+                   
+                    showError('Error al descargar el documento');
+                });
         } catch (error) {
-            console.error('Error al descargar documento:', error);
             showError('Error al descargar el documento');
         }
     };
+
+    // Custom templates 
+    const headerPanelActividad = (options: any, data: any) => {
+        const className = `${options.className} flex align-items-center gap-2`;
+        const actividadCompletada = isActividadCompletada(data.uuid, proyectoActivo?.uuid);
+        const avanceActividad = calcularAvanceActividad(data.uuid, proyectoActivo?.uuid);
+        
+        // Contar tareas solo si están cargadas desde el cache/estado local
+        const tareasActuales = tareasPorActividad[data.uuid] || [];
+        const totalTareasLocales = tareasActuales.length;
+        const tareasCompletadasLocales = tareasActuales.filter((t: any) => t.estatus === 'Completada').length;
+        const hayTareasCargadas = totalTareasLocales > 0;
+        
+        // Obtener datos del servidor si no hay tareas cargadas localmente
+        const totalTareasServidor = data.total_tareas || 0;
+        const tareasCompletadasServidor = data.tareas_completadas || 0;
+        
+        // Determinar qué datos usar para mostrar
+        const totalTareas = hayTareasCargadas ? totalTareasLocales : totalTareasServidor;
+        const tareasCompletadas = hayTareasCargadas ? tareasCompletadasLocales : tareasCompletadasServidor;
+        
+        return (
+            <div className={className} style={{ flexWrap: 'nowrap' }}>
+                {/* Contenedor del contenido principal - ocupa el espacio disponible */}
+                <div className="flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                    {actividadCompletada ? (
+                        <div className="flex align-items-center gap-1" title="Actividad completada">
+                            <i className="pi pi-check-circle text-green-600 flex-shrink-0"></i>
+                        </div>
+                    ) : (
+                        <div className="flex align-items-center gap-1" 
+                             title={`${tareasCompletadas}/${totalTareas} tareas completadas`}>
+                            <i className="pi pi-clock text-orange-500 flex-shrink-0"></i>
+                            <span className="text-xs text-orange-500 font-semibold flex-shrink-0">
+                                {`${tareasCompletadas}/${totalTareas}`}
+                            </span>
+                        </div>
+                    )}
+                    <span className="font-bold text-ellipsis overflow-hidden whitespace-nowrap flex-grow-1" 
+                          title={data.nombre}>
+                        {data.nombre}
+                    </span>
+                    {!hayTareasCargadas && typeof data.porcentaje_avance === 'number' && (
+                        <i className="pi pi-database text-xs text-gray-400 flex-shrink-0" 
+                           title="Avance calculado por el servidor"></i>
+                    )}
+                    {hayTareasCargadas && (
+                        <i className="pi pi-refresh text-xs text-green-500 flex-shrink-0" 
+                           title="Avance en tiempo real"></i>
+                    )}
+                </div>
+                
+                {/* Contenedor de acciones - siempre permanece a la derecha */}
+                <div className="flex align-items-center gap-2 flex-shrink-0">
+                    <Button
+                        icon="pi pi-folder-open"
+                        rounded
+                        text
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setActividadSeleccionada(data);
+                            setVisibleRepositorioDocumentos(true);
+                        }}
+                        tooltip="Documentos"
+                        className="text-blue-600 hover:bg-blue-50"
+                    />
+                    <Button
+                        icon={ data.uuid === actividadSeleccionada?.uuid ? "pi pi-eye" : "pi pi-eye-slash" }
+                        rounded
+                        text
+                        size="small"
+                        onClick={() => seleccionarActividad(data) }
+                        tooltip='Ver detalles de actividad'
+                        className={ data.uuid === actividadSeleccionada?.uuid ? "text-green-600 hover:bg-green-50" : "text-surface-600" }
+                    />
+                    {options.togglerElement}
+                </div>
+            </div>
+        );
+    }
 
     // Template para DataScroller de proyectos
     const proyectoTemplate = (proyecto: any) => {
@@ -1144,85 +1238,6 @@ const ProyectoPage = () => {
             </div>
         );
     };
-
-    // Custom templates 
-    const headerPanelActividad = (options: any, data: any) => {
-        const className = `${options.className} flex align-items-center gap-2`;
-        const actividadCompletada = isActividadCompletada(data.uuid, proyectoActivo?.uuid);
-        const avanceActividad = calcularAvanceActividad(data.uuid, proyectoActivo?.uuid);
-        
-        // Contar tareas solo si están cargadas desde el cache/estado local
-        const tareasActuales = tareasPorActividad[data.uuid] || [];
-        const totalTareasLocales = tareasActuales.length;
-        const tareasCompletadasLocales = tareasActuales.filter((t: any) => t.estatus === 'Completada').length;
-        const hayTareasCargadas = totalTareasLocales > 0;
-        
-        // Obtener datos del servidor si no hay tareas cargadas localmente
-        const totalTareasServidor = data.total_tareas || 0;
-        const tareasCompletadasServidor = data.tareas_completadas || 0;
-        
-        // Determinar qué datos usar para mostrar
-        const totalTareas = hayTareasCargadas ? totalTareasLocales : totalTareasServidor;
-        const tareasCompletadas = hayTareasCargadas ? tareasCompletadasLocales : tareasCompletadasServidor;
-        
-        return (
-            <div className={className} style={{ flexWrap: 'nowrap' }}>
-                {/* Contenedor del contenido principal - ocupa el espacio disponible */}
-                <div className="flex align-items-center gap-2 flex-grow-1 overflow-hidden">
-                    {actividadCompletada ? (
-                        <div className="flex align-items-center gap-1" title="Actividad completada">
-                            <i className="pi pi-check-circle text-green-600 flex-shrink-0"></i>
-                        </div>
-                    ) : (
-                        <div className="flex align-items-center gap-1" 
-                             title={`${tareasCompletadas}/${totalTareas} tareas completadas`}>
-                            <i className="pi pi-clock text-orange-500 flex-shrink-0"></i>
-                            <span className="text-xs text-orange-500 font-semibold flex-shrink-0">
-                                {`${tareasCompletadas}/${totalTareas}`}
-                            </span>
-                        </div>
-                    )}
-                    <span className="font-bold text-ellipsis overflow-hidden whitespace-nowrap flex-grow-1" 
-                          title={data.nombre}>
-                        {data.nombre}
-                    </span>
-                    {!hayTareasCargadas && typeof data.porcentaje_avance === 'number' && (
-                        <i className="pi pi-database text-xs text-gray-400 flex-shrink-0" 
-                           title="Avance calculado por el servidor"></i>
-                    )}
-                    {hayTareasCargadas && (
-                        <i className="pi pi-refresh text-xs text-green-500 flex-shrink-0" 
-                           title="Avance en tiempo real"></i>
-                    )}
-                </div>
-                
-                {/* Contenedor de acciones - siempre permanece a la derecha */}
-                <div className="flex align-items-center gap-2 flex-shrink-0">
-                    <Button
-                        icon="pi pi-folder-open"
-                        rounded
-                        text
-                        size="small"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setActividadSeleccionada(data);
-                            setVisibleRepositorioDocumentos(true);
-                        }}
-                        tooltip="Documentos"
-                        className="text-blue-600 hover:bg-blue-50"
-                    />
-                    <Checkbox
-                        checked={data.uuid === actividadSeleccionada?.uuid}
-                        onClick={() => seleccionarActividad(data) }
-                        className="form-checkbox text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    {options.togglerElement}
-                </div>
-            </div>
-        );
-    }
-
-   
 
     return (
         <div className="grid">
@@ -1474,7 +1489,7 @@ const ProyectoPage = () => {
                     
                     <div className="p-4">
                         {/* People Section */}
-                        <div className="mb-4">
+                        <div className="mb-3">
                             <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Participantes</h3>
                             <div className="grid">
                                 <div className="col-12 mb-2">
@@ -1508,7 +1523,7 @@ const ProyectoPage = () => {
                         </div>
 
                         {/* Details Section */}
-                        <div className="mb-4">
+                        <div className="mb-3">
                             <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles</h3>
                             <div className="grid">
                                 <div className="col-12 mb-3">
@@ -1521,11 +1536,19 @@ const ProyectoPage = () => {
                                     </span>
                                     <span className="font-medium">{actividadSeleccionada.persona_beneficiada}</span>
                                 </div>
+                                <div className="col-12 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prioridad</span>
+                                    <span className="font-medium">{actividadSeleccionada.prioridad}</span>
+                                </div>
+                                <div className="col-12 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Registro NAFIN</span>
+                                    <span className="font-medium">{actividadSeleccionada.registro_nafin || 'No disponible'}</span>
+                                </div>
                             </div>
                         </div>
 
                         {/* Dates Section */}
-                        <div className="mb-4">
+                        <div className="mb-3">
                             <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Fechas</h3>
                             <div className="grid">
                                 <div className="col-6 mb-3">
@@ -1533,7 +1556,11 @@ const ProyectoPage = () => {
                                         <i className="pi pi-calendar text-primary mr-2"></i>Inicio
                                     </span>
                                     <span className="font-medium">
-                                        {actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString() : 'No disponible'}
+                                        {actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString('es-ES', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                        }).replace('.', '') : 'No disponible'}
                                     </span>
                                 </div>
                                 <div className="col-6 mb-3">
@@ -1541,14 +1568,42 @@ const ProyectoPage = () => {
                                         <i className="pi pi-flag text-danger mr-2"></i>Fin
                                     </span>
                                     <span className="font-medium">
-                                        {actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString() : 'No disponible'}
+                                        {actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString('es-ES', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                        }).replace('.', '') : 'No disponible'}
                                     </span>
+                                </div>
+                                <div className="col-6 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha solicitud constancia</span>
+                                    <span className="font-medium">{actividadSeleccionada.fecha_solicitud_constancia ? new Date(actividadSeleccionada.fecha_solicitud_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                </div>
+                                <div className="col-6 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío constancia</span>
+                                    <span className="font-medium">{actividadSeleccionada.fecha_envio_constancia ? new Date(actividadSeleccionada.fecha_envio_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                </div>
+                                <div className="col-6 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha vencimiento envío encuesta</span>
+                                    <span className="font-medium">{actividadSeleccionada.fecha_vencimiento_envio_encuesta ? new Date(actividadSeleccionada.fecha_vencimiento_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                </div>
+                                <div className="col-6 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío encuesta</span>
+                                    <span className="font-medium">{actividadSeleccionada.fecha_envio_encuesta ? new Date(actividadSeleccionada.fecha_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                </div>
+                                <div className="col-6 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha inicio difusión banner</span>
+                                    <span className="font-medium">{actividadSeleccionada.fecha_inicio_difusion_banner ? new Date(actividadSeleccionada.fecha_inicio_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                </div>
+                                <div className="col-6 mb-3">
+                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha fin difusión banner</span>
+                                    <span className="font-medium">{actividadSeleccionada.fecha_fin_difusion_banner ? new Date(actividadSeleccionada.fecha_fin_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
                                 </div>
                             </div>
                         </div>
 
                         {/* Links Section */}
-                        <div className="mb-4">
+                        <div className="mb-3">
                             <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Enlaces</h3>
                             <div className="grid">
                                 <div className="col-4">
@@ -1749,6 +1804,7 @@ const ProyectoPage = () => {
                 visible={visibleRepositorioDocumentos}
                 onHide={() => setVisibleRepositorioDocumentos(false)}
                 actividad={actividadSeleccionada}
+                tiposDocumento={tiposDocumento}
                 onUploadDocument={handleUploadDocumento}
                 onDeleteDocument={handleDeleteDocumento}
                 onDownloadDocument={handleDownloadDocumento}

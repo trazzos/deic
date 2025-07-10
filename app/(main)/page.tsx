@@ -1,393 +1,258 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
-import { Button } from 'primereact/button';
+import React, { useState } from 'react';
 import { Chart } from 'primereact/chart';
-import { Column } from 'primereact/column';
-import { DataTable } from 'primereact/datatable';
-import { Menu } from 'primereact/menu';
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ProductService } from '../../demo/service/ProductService';
-import { LayoutContext } from '../../layout/context/layoutcontext';
-import Link from 'next/link';
-import { Demo } from '@/types';
-import { ChartData, ChartOptions } from 'chart.js';
+import { ProgressBar } from 'primereact/progressbar';
+import { Avatar } from 'primereact/avatar';
+import { Tag } from 'primereact/tag';
+import { Button } from 'primereact/button';
 
-const lineData: ChartData = {
-    labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
-    datasets: [
-        {
-            label: 'First Dataset',
-            data: [65, 59, 80, 81, 56, 55, 40],
-            fill: false,
-            backgroundColor: '#2f4860',
-            borderColor: '#2f4860',
-            tension: 0.4
-        },
-        {
-            label: 'Second Dataset',
-            data: [28, 48, 40, 19, 86, 27, 90],
-            fill: false,
-            backgroundColor: '#00bb7e',
-            borderColor: '#00bb7e',
-            tension: 0.4
-        }
-    ]
-};
+// Datos simulados para el dashboard ejecutivo
+const departamentos = [
+	{ nombre: 'TI', proyectos: 12 },
+	{ nombre: 'Obras Públicas', proyectos: 8 },
+	{ nombre: 'Educación', proyectos: 15 },
+	{ nombre: 'Salud', proyectos: 10 },
+	{ nombre: 'Cultura', proyectos: 5 },
+];
 
-const Dashboard = () => {
-    const [products, setProducts] = useState<Demo.Product[]>([]);
-    const menu1 = useRef<Menu>(null);
-    const menu2 = useRef<Menu>(null);
-    const [lineOptions, setLineOptions] = useState<ChartOptions>({});
-    const { layoutConfig } = useContext(LayoutContext);
+const avanceProyectos = 72; // % global
 
-    const applyLightTheme = () => {
-        const lineOptions: ChartOptions = {
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#495057'
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: {
-                        color: '#495057'
-                    },
-                    grid: {
-                        color: '#ebedef'
-                    }
-                },
-                y: {
-                    ticks: {
-                        color: '#495057'
-                    },
-                    grid: {
-                        color: '#ebedef'
-                    }
-                }
-            }
-        };
+const proyectos = [
+	{ nombre: 'Sistema de Gestión', avance: 90 },
+	{ nombre: 'Construcción Hospital', avance: 60 },
+	{ nombre: 'Plataforma Educativa', avance: 80 },
+	{ nombre: 'Museo Digital', avance: 40 },
+	{ nombre: 'Red de Salud', avance: 55 },
+];
 
-        setLineOptions(lineOptions);
-    };
+const responsables = [
+	{ nombre: 'Ana López', avatar: '/demo/images/avatar/ana.png', actividades: 34 },
+	{ nombre: 'Carlos Ruiz', avatar: '/demo/images/avatar/carlos.png', actividades: 29 },
+	{ nombre: 'María Pérez', avatar: '/demo/images/avatar/maria.png', actividades: 27 },
+	{ nombre: 'Luis Gómez', avatar: '/demo/images/avatar/luis.png', actividades: 25 },
+	{ nombre: 'Sofía Torres', avatar: '/demo/images/avatar/sofia.png', actividades: 22 },
+	{ nombre: 'Pedro Sánchez', avatar: '/demo/images/avatar/pedro.png', actividades: 20 },
+	{ nombre: 'Lucía Díaz', avatar: '/demo/images/avatar/lucia.png', actividades: 18 },
+	{ nombre: 'Miguel Ángel', avatar: '/demo/images/avatar/miguel.png', actividades: 16 },
+	{ nombre: 'Elena Ríos', avatar: '/demo/images/avatar/elena.png', actividades: 15 },
+	{ nombre: 'Jorge Herrera', avatar: '/demo/images/avatar/jorge.png', actividades: 14 },
+];
 
-    const applyDarkTheme = () => {
-        const lineOptions = {
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#ebedef'
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: {
-                        color: '#ebedef'
-                    },
-                    grid: {
-                        color: 'rgba(160, 167, 181, .3)'
-                    }
-                },
-                y: {
-                    ticks: {
-                        color: '#ebedef'
-                    },
-                    grid: {
-                        color: 'rgba(160, 167, 181, .3)'
-                    }
-                }
-            }
-        };
+const proyectosPrioritarios = [
+	{ nombre: 'Construcción Hospital', avance: 60, responsable: 'Carlos Ruiz', prioridad: 'Alta' },
+	{ nombre: 'Sistema de Gestión', avance: 90, responsable: 'Ana López', prioridad: 'Media' },
+	{ nombre: 'Red de Salud', avance: 55, responsable: 'Luis Gómez', prioridad: 'Alta' },
+];
 
-        setLineOptions(lineOptions);
-    };
+const ultimasActividades = [
+	{ actividad: 'Entrega de reporte mensual', proyecto: 'Sistema de Gestión', responsable: 'Ana López', fecha: '2025-07-10 09:30' },
+	{ actividad: 'Reunión de avance', proyecto: 'Construcción Hospital', responsable: 'Carlos Ruiz', fecha: '2025-07-09 16:00' },
+	{ actividad: 'Capacitación usuarios', proyecto: 'Plataforma Educativa', responsable: 'María Pérez', fecha: '2025-07-09 12:00' },
+	{ actividad: 'Visita de supervisión', proyecto: 'Red de Salud', responsable: 'Luis Gómez', fecha: '2025-07-08 10:00' },
+	{ actividad: 'Actualización de contenidos', proyecto: 'Museo Digital', responsable: 'Sofía Torres', fecha: '2025-07-08 08:30' },
+];
 
-    useEffect(() => {
-        ProductService.getProductsSmall().then((data) => setProducts(data));
-    }, []);
+export default function DashboardEjecutivo() {
+	// Gráfica: Proyectos por departamento
+	const barData = {
+		labels: departamentos.map((d) => d.nombre),
+		datasets: [
+			{
+				label: 'Proyectos',
+				backgroundColor: '#6366f1',
+				data: departamentos.map((d) => d.proyectos),
+				borderRadius: 8,
+			},
+		],
+	};
+	const barOptions = {
+		indexAxis: 'y',
+		plugins: { legend: { display: false } },
+		scales: {
+			x: { grid: { color: '#f3f4f6' }, ticks: { color: '#64748b' } },
+			y: { grid: { color: '#f3f4f6' }, ticks: { color: '#64748b' } },
+		},
+		responsive: true,
+		maintainAspectRatio: false,
+	};
 
-    useEffect(() => {
-        if (layoutConfig.colorScheme === 'light') {
-            applyLightTheme();
-        } else {
-            applyDarkTheme();
-        }
-    }, [layoutConfig.colorScheme]);
+	// Gráfica: Avance global de proyectos
+	const donutData = {
+		labels: ['Avance', 'Restante'],
+		datasets: [
+			{
+				data: [avanceProyectos, 100 - avanceProyectos],
+				backgroundColor: ['#22c55e', '#e5e7eb'],
+				borderWidth: 0,
+			},
+		],
+	};
+	const donutOptions = {
+		cutout: '75%',
+		plugins: {
+			legend: { display: false },
+			tooltip: { enabled: false },
+		},
+		responsive: true,
+		maintainAspectRatio: true,
+	};
 
-    const formatCurrency = (value: number) => {
-        return value?.toLocaleString('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        });
-    };
+	return (
+		<div className="grid">
+			{/* Tarjetas resumen */}
+			<div className="col-12 md:col-6 xl:col-3">
+				<div className="card border-round-xl shadow-2 bg-white mb-0">
+					<div className="flex align-items-center gap-3 mb-2">
+						<i className="pi pi-folder-open text-3xl text-primary-500" />
+						<span className="text-lg font-semibold text-primary-800">Proyectos registrados</span>
+					</div>
+					<div className="text-4xl font-bold text-primary-700 mb-1">
+						{departamentos.reduce((a, d) => a + d.proyectos, 0)}
+					</div>
+					<span className="text-500">en {departamentos.length} departamentos</span>
+				</div>
+			</div>
+			<div className="col-12 md:col-6 xl:col-3">
+				<div className="card border-round-xl shadow-2 bg-white mb-0" style={{ position: 'relative' }}>
+					<div className="flex align-items-center gap-3 mb-2">
+						<i className="pi pi-chart-pie text-3xl text-green-500" />
+						<span className="text-lg font-semibold text-green-700">Avance global</span>
+					</div>
+					<div style={{ height: 90, width: 90, margin: '0 auto', position: 'relative' }}>
+						<Chart type="doughnut" data={donutData} options={donutOptions} />
+						<div style={{
+							position: 'absolute',
+							left: 0,
+							right: 0,
+							top: 0,
+							bottom: 0,
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'center',
+							pointerEvents: 'none',
+							fontSize: 24,
+							fontWeight: 700,
+							color: '#22c55e',
+						}}>{avanceProyectos}%</div>
+					</div>
+					<span className="text-500">de avance en todos los proyectos</span>
+				</div>
+			</div>
+			<div className="col-12 md:col-12 xl:col-6">
+				<div className="card border-round-xl shadow-2 bg-white mb-0" style={{ minHeight: 220 }}>
+					<div className="flex align-items-center gap-3 mb-3">
+						<i className="pi pi-building text-2xl text-blue-500" />
+						<span className="text-lg font-semibold text-blue-700">Proyectos por departamento</span>
+					</div>
+					<div style={{ height: 180 }}>
+						<Chart type="bar" data={barData} options={barOptions} />
+					</div>
+				</div>
+			</div>
 
-    return (
-        <div className="grid">
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Orders</span>
-                            <div className="text-900 font-medium text-xl">152</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-blue-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-shopping-cart text-blue-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">24 new </span>
-                    <span className="text-500">since last visit</span>
-                </div>
-            </div>
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Revenue</span>
-                            <div className="text-900 font-medium text-xl">$2.100</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-orange-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-map-marker text-orange-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">%52+ </span>
-                    <span className="text-500">since last week</span>
-                </div>
-            </div>
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Customers</span>
-                            <div className="text-900 font-medium text-xl">28441</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-cyan-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-inbox text-cyan-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">520 </span>
-                    <span className="text-500">newly registered</span>
-                </div>
-            </div>
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Comments</span>
-                            <div className="text-900 font-medium text-xl">152 Unread</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-purple-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-comment text-purple-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">85 </span>
-                    <span className="text-500">responded</span>
-                </div>
-            </div>
+			{/* Avance de actividades por proyecto */}
+			<div className="col-12 xl:col-6">
+				<div className="card border-round-xl shadow-2 bg-white mb-0">
+					<div className="flex align-items-center gap-3 mb-3">
+						<i className="pi pi-tasks text-2xl text-cyan-500" />
+						<span className="text-lg font-semibold text-cyan-700">Avance de actividades por proyecto</span>
+					</div>
+					<div className="flex flex-column gap-3">
+						{proyectos.map((p) => (
+							<div key={p.nombre} className="flex align-items-center gap-3">
+								<span className="w-10rem text-900 font-medium">{p.nombre}</span>
+								<ProgressBar value={p.avance} showValue className="flex-1" style={{ height: 18 }} />
+								<span className="text-700 font-semibold ml-2">{p.avance}%</span>
+							</div>
+						))}
+					</div>
+				</div>
+			</div>
 
-            <div className="col-12 xl:col-6">
-                <div className="card">
-                    <h5>Recent Sales</h5>
-                    <DataTable value={products} rows={5} paginator responsiveLayout="scroll">
-                        <Column header="Image" body={(data) => <img className="shadow-2" src={`/demo/images/product/${data.image}`} alt={data.image} width="50" />} />
-                        <Column field="name" header="Name" sortable style={{ width: '35%' }} />
-                        <Column field="price" header="Price" sortable style={{ width: '35%' }} body={(data) => formatCurrency(data.price)} />
-                        <Column
-                            header="View"
-                            style={{ width: '15%' }}
-                            body={() => (
-                                <>
-                                    <Button icon="pi pi-search" text />
-                                </>
-                            )}
-                        />
-                    </DataTable>
-                </div>
-                <div className="card">
-                    <div className="flex justify-content-between align-items-center mb-5">
-                        <h5>Best Selling Products</h5>
-                        <div>
-                            <Button type="button" icon="pi pi-ellipsis-v" rounded text className="p-button-plain" onClick={(event) => menu1.current?.toggle(event)} />
-                            <Menu
-                                ref={menu1}
-                                popup
-                                model={[
-                                    { label: 'Add New', icon: 'pi pi-fw pi-plus' },
-                                    { label: 'Remove', icon: 'pi pi-fw pi-minus' }
-                                ]}
-                            />
-                        </div>
-                    </div>
-                    <ul className="list-none p-0 m-0">
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Space T-Shirt</span>
-                                <div className="mt-1 text-600">Clothing</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-orange-500 h-full" style={{ width: '50%' }} />
-                                </div>
-                                <span className="text-orange-500 ml-3 font-medium">%50</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Portal Sticker</span>
-                                <div className="mt-1 text-600">Accessories</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-cyan-500 h-full" style={{ width: '16%' }} />
-                                </div>
-                                <span className="text-cyan-500 ml-3 font-medium">%16</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Supernova Sticker</span>
-                                <div className="mt-1 text-600">Accessories</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-pink-500 h-full" style={{ width: '67%' }} />
-                                </div>
-                                <span className="text-pink-500 ml-3 font-medium">%67</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Wonders Notebook</span>
-                                <div className="mt-1 text-600">Office</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-green-500 h-full" style={{ width: '35%' }} />
-                                </div>
-                                <span className="text-green-500 ml-3 font-medium">%35</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Mat Black Case</span>
-                                <div className="mt-1 text-600">Accessories</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-purple-500 h-full" style={{ width: '75%' }} />
-                                </div>
-                                <span className="text-purple-500 ml-3 font-medium">%75</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Robots T-Shirt</span>
-                                <div className="mt-1 text-600">Clothing</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-teal-500 h-full" style={{ width: '40%' }} />
-                                </div>
-                                <span className="text-teal-500 ml-3 font-medium">%40</span>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-            </div>
+			{/* Top responsables */}
+			<div className="col-12 xl:col-6">
+				<div className="card border-round-xl shadow-2 bg-white mb-0">
+					<div className="flex align-items-center gap-3 mb-3">
+						<i className="pi pi-users text-2xl text-violet-500" />
+						<span className="text-lg font-semibold text-violet-700">Top 10 responsables</span>
+					</div>
+					<ul className="list-none p-0 m-0">
+						{responsables.map((r, idx) => (
+							<li key={r.nombre} className="flex align-items-center gap-3 mb-2">
+								<span className="text-900 font-bold" style={{ width: 24 }}>
+									{idx + 1}
+								</span>
+								<Avatar image={r.avatar} shape="circle" size="large" />
+								<span className="flex-1 text-900 font-medium">{r.nombre}</span>
+								<ProgressBar
+									value={Math.round((r.actividades / responsables[0].actividades) * 100)}
+									showValue={false}
+									style={{ width: 80, height: 10 }}
+									className="mx-2"
+								/>
+								<span className="text-700 font-semibold">{r.actividades} act.</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			</div>
 
-            <div className="col-12 xl:col-6">
-                <div className="card">
-                    <h5>Sales Overview</h5>
-                    <Chart type="line" data={lineData} options={lineOptions} />
-                </div>
+			{/* Proyectos prioritarios */}
+			<div className="col-12 xl:col-6">
+				<div className="card border-round-xl shadow-2 bg-white mb-0">
+					<div className="flex align-items-center gap-3 mb-3">
+						<i className="pi pi-star text-2xl text-yellow-500" />
+						<span className="text-lg font-semibold text-yellow-700">Proyectos prioritarios</span>
+					</div>
+					<div className="flex flex-column gap-3">
+						{proyectosPrioritarios.map((p) => (
+							<div
+								key={p.nombre}
+								className="flex align-items-center gap-3 p-3 border-1 border-round surface-border bg-yellow-50"
+							>
+								<span className="text-900 font-medium flex-1">{p.nombre}</span>
+								<Tag
+									value={p.prioridad}
+									severity={p.prioridad === 'Alta' ? 'danger' : 'warning'}
+								/>
+								<span className="text-700">{p.responsable}</span>
+								<ProgressBar
+									value={p.avance}
+									showValue={false}
+									style={{ width: 80, height: 10 }}
+									className="mx-2"
+								/>
+								<span className="text-700 font-semibold">{p.avance}%</span>
+							</div>
+						))}
+					</div>
+				</div>
+			</div>
 
-                <div className="card">
-                    <div className="flex align-items-center justify-content-between mb-4">
-                        <h5>Notifications</h5>
-                        <div>
-                            <Button type="button" icon="pi pi-ellipsis-v" rounded text className="p-button-plain" onClick={(event) => menu2.current?.toggle(event)} />
-                            <Menu
-                                ref={menu2}
-                                popup
-                                model={[
-                                    { label: 'Add New', icon: 'pi pi-fw pi-plus' },
-                                    { label: 'Remove', icon: 'pi pi-fw pi-minus' }
-                                ]}
-                            />
-                        </div>
-                    </div>
-
-                    <span className="block text-600 font-medium mb-3">TODAY</span>
-                    <ul className="p-0 mx-0 mt-0 mb-4 list-none">
-                        <li className="flex align-items-center py-2 border-bottom-1 surface-border">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-blue-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-dollar text-xl text-blue-500" />
-                            </div>
-                            <span className="text-900 line-height-3">
-                                Richard Jones
-                                <span className="text-700">
-                                    {' '}
-                                    has purchased a blue t-shirt for <span className="text-blue-500">79$</span>
-                                </span>
-                            </span>
-                        </li>
-                        <li className="flex align-items-center py-2">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-orange-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-download text-xl text-orange-500" />
-                            </div>
-                            <span className="text-700 line-height-3">
-                                Your request for withdrawal of <span className="text-blue-500 font-medium">2500$</span> has been initiated.
-                            </span>
-                        </li>
-                    </ul>
-
-                    <span className="block text-600 font-medium mb-3">YESTERDAY</span>
-                    <ul className="p-0 m-0 list-none">
-                        <li className="flex align-items-center py-2 border-bottom-1 surface-border">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-blue-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-dollar text-xl text-blue-500" />
-                            </div>
-                            <span className="text-900 line-height-3">
-                                Keyser Wick
-                                <span className="text-700">
-                                    {' '}
-                                    has purchased a black jacket for <span className="text-blue-500">59$</span>
-                                </span>
-                            </span>
-                        </li>
-                        <li className="flex align-items-center py-2 border-bottom-1 surface-border">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-pink-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-question text-xl text-pink-500" />
-                            </div>
-                            <span className="text-900 line-height-3">
-                                Jane Davis
-                                <span className="text-700"> has posted a new questions about your product.</span>
-                            </span>
-                        </li>
-                    </ul>
-                </div>
-                <div
-                    className="px-4 py-5 shadow-2 flex flex-column md:flex-row md:align-items-center justify-content-between mb-3"
-                    style={{
-                        borderRadius: '1rem',
-                        background: 'linear-gradient(0deg, rgba(0, 123, 255, 0.5), rgba(0, 123, 255, 0.5)), linear-gradient(92.54deg, #1C80CF 47.88%, #FFFFFF 100.01%)'
-                    }}
-                >
-                    <div>
-                        <div className="text-blue-100 font-medium text-xl mt-2 mb-3">TAKE THE NEXT STEP</div>
-                        <div className="text-white font-medium text-5xl">Try PrimeBlocks</div>
-                    </div>
-                    <div className="mt-4 mr-auto md:mt-0 md:mr-0">
-                        <Link href="https://blocks.primereact.org" className="p-button font-bold px-5 py-3 p-button-warning p-button-rounded p-button-raised">
-                            Get Started
-                        </Link>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-export default Dashboard;
+			{/* Últimas actividades */}
+			<div className="col-12 xl:col-6">
+				<div className="card border-round-xl shadow-2 bg-white mb-0">
+					<div className="flex align-items-center gap-3 mb-3">
+						<i className="pi pi-clock text-2xl text-gray-500" />
+						<span className="text-lg font-semibold text-gray-700">Últimas actividades</span>
+					</div>
+					<ul className="list-none p-0 m-0">
+						{ultimasActividades.map((a, idx) => (
+							<li key={idx} className="flex align-items-center gap-3 py-2 border-bottom-1 surface-border">
+								<i className="pi pi-check-circle text-green-500 text-xl" />
+								<div className="flex flex-column">
+									<span className="text-900 font-medium">{a.actividad}</span>
+									<span className="text-700 text-sm">
+										{a.proyecto} &middot; {a.responsable}
+									</span>
+								</div>
+								<span className="ml-auto text-500 text-xs">{a.fecha}</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			</div>
+		</div>
+	);
+}
