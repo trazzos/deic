@@ -60,7 +60,6 @@ export default function FormularioRol({ visible, onHide, onSave, initialData, pe
             value={permisosTree}
             selectionMode="checkbox"
             selectionKeys={selectedKeys}
-            onSelectionChange={(e) => setSelectedKeys(e.value)}
             className="w-full border-round shadow-1"
             filter
             filterPlaceholder="Buscar permiso..."
