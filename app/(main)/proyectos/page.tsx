@@ -442,12 +442,12 @@ const ProyectoPage = () => {
             accept: async () => {
                 try {
 
-                    let { dataItem, index } = e;
-                    setDeletingRows({ [dataItem.uuid]: true });
-                    await ProyectoService.deleteProyecto(dataItem.uuid);
+                    let { data, index } = e;
+                    setDeletingRows({ [data.uuid]: true });
+                    await ProyectoService.deleteProyecto(data.uuid);
 
                     // Check if the deleted project is the currently selected one
-                    if (proyectoActivo.uuid === dataItem.uuid) {
+                    if (proyectoActivo.uuid === data.uuid) {
                         // Reset the selected project and panels
                         setProyectoActivo({});
                         setOpenPanelProyecto(false);
@@ -457,8 +457,8 @@ const ProyectoPage = () => {
                         setTareasPorActividad({});
                     }
 
-                    updateRows(dataItem, true);
-                    cleanRowsDeleting(dataItem);
+                    updateRows(data, true);
+                    cleanRowsDeleting(data);
                     showSuccess('Proyecto eliminado correctamente');
 
                 } catch (error:any) {
