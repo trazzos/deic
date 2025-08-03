@@ -1,3 +1,4 @@
+export * from './dependenciaProyecto'
 export * from './autoridad'
 export * from './beneficiario'
 export * from './capacitador'

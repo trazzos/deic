@@ -17,9 +17,10 @@ import {
     DepartamentoService, 
     TipoProyectoService,
     TipoDocumentoService,
-    ProyectoService, 
-    TipoActividadService, 
-    PersonaService, 
+    ProyectoService,
+    DependenciaProyectoService,
+    TipoActividadService,
+    PersonaService,
     BeneficiarioService,
     AutoridadService,
     CapacitadorService,
@@ -28,6 +29,8 @@ import {
 import { useNotification } from '@/layout/context/notificationContext';
 import FormularioActividad  from './FormularioActividad'
 import FormularioProyecto from './FormularioProyecto';
+import EmptyStateProject from './components/EmptyStateProject';
+import EmptyStateActivity from './components/EmptyStateActivity';
 import RepositorioDocumentos from './components/RepositorioDocumentos';
 
 interface Proyecto {
@@ -439,11 +442,23 @@ const ProyectoPage = () => {
             accept: async () => {
                 try {
 
-                    let { data, index } = e;
-                    setDeletingRows({ [data.uuid]: true });
-                    await ProyectoService.deleteProyecto(data.uuid);
-                    updateRows(data, true);
-                    cleanRowsDeleting(data);
+                    let { dataItem, index } = e;
+                    setDeletingRows({ [dataItem.uuid]: true });
+                    await ProyectoService.deleteProyecto(dataItem.uuid);
+
+                    // Check if the deleted project is the currently selected one
+                    if (proyectoActivo.uuid === dataItem.uuid) {
+                        // Reset the selected project and panels
+                        setProyectoActivo({});
+                        setOpenPanelProyecto(false);
+                        setOpenPanelActividad(false);
+                        // Clear activities and tasks for the deleted project
+                        setActividades([]);
+                        setTareasPorActividad({});
+                    }
+
+                    updateRows(dataItem, true);
+                    cleanRowsDeleting(dataItem);
                     showSuccess('Proyecto eliminado correctamente');
 
                 } catch (error:any) {
@@ -456,7 +471,6 @@ const ProyectoPage = () => {
     }
 
     const onAgregar = () => {
-
       setFormularioProyecto(initStateFormularioProyecto);  
       setVisibleFormulario(true);  
     }
@@ -601,8 +615,6 @@ const ProyectoPage = () => {
             showSuccess('El registro se ha guardado correctamente');
 
         } catch (err: any) {
-        
-            console.error(err);
             if (err.inner) {
                 const errors: { [key: string]: string } = {};
                 err.inner.forEach((validationError: any) => {
@@ -664,9 +676,34 @@ const ProyectoPage = () => {
             acceptLabel: 'Si',
             rejectLabel: 'No',
             accept: () => {
-                ProyectoService.deleteActividadPorProyecto(proyectoActivo.uuid, e.data.uuid)
+                ProyectoService.deleteActividadPorProyecto(proyectoActivo.uuid, e.itemData.uuid)
                     .then(() => {
-                        setActividades((prev: any) => prev.filter((act: any) => act.uuid !== e.data.uuid));
+                        // Remove from current activities list
+                        setActividades((prev: any) => prev.filter((act: any) => act.uuid !== e.itemData.uuid));
+                        
+                        // Remove from activities cache for this project
+                        setActividadesPorProyecto(prev => ({
+                            ...prev,
+                            [proyectoActivo.uuid]: prev[proyectoActivo.uuid]?.filter((act: any) => act.uuid !== e.itemData.uuid) || []
+                        }));
+                        
+                        // Remove tasks for this activity from cache
+                        setTareasPorProyecto(prev => {
+                            const newCache = { ...prev };
+                            if (newCache[proyectoActivo.uuid]) {
+                                const { [e.itemData.uuid]: deletedActivityTasks, ...restTasks } = newCache[proyectoActivo.uuid];
+                                newCache[proyectoActivo.uuid] = restTasks;
+                            }
+                            return newCache;
+                        });
+                        
+                        // Reset selected activity if it's the one being deleted
+                        if (actividadSeleccionada.uuid === e.itemData.uuid) {
+                            setActividadSeleccionada({});
+                            setOpenPanelActividad(false);
+                            setOpenPanelProyecto(true);
+                        }
+                        
                         showSuccess('Actividad eliminada correctamente');
                     })
                     .catch((error: any) => showError(error.message || 'Ha ocurrido un error al eliminar la actividad'));
@@ -690,34 +727,32 @@ const ProyectoPage = () => {
 
         const fetchCatalogos = async () => {
             try {
-                const responseDepartamentos = await DepartamentoService.getListDepartamento();
-                setDepartamentos(responseDepartamentos.data);
+                // Ejecutar las peticiones de forma concurrente: dependencias y proyectos
+                const [
+                    responseDependencias,
+                    responseProyectos
+                ] = await Promise.all([
+                    DependenciaProyectoService.getAll(),
+                    ProyectoService.paginateProyecto(page, perPage)
+                ]);
 
-                const responseTiposDocumento = await TipoDocumentoService.getListTipoDocumento();
-                setTiposDocumento(responseTiposDocumento.data);
-
-                const responseTiposProyecto = await TipoProyectoService.getListTipoProyecto();
-                setTiposProyecto(responseTiposProyecto.data);
-
-                const responseTiposActividad = await TipoActividadService.getListTipoActividad();
-                setTiposActividad(responseTiposActividad.data);
-
-                const responseBeneficiarios = await BeneficiarioService.getListBeneficiario();
-                setBeneficiarios(responseBeneficiarios.data);
-
-                const responseAutoridades = await AutoridadService.getListAutoridad();
-                setAutoridades(responseAutoridades.data);
-
-                const responseResponsables = await PersonaService.getListPersona();
-                setResponsables(responseResponsables.data.map((item: any) => ({
+                // Extraer los catálogos de la respuesta de dependencias
+                const dependencias = responseDependencias.data;
+                
+                // Actualizar todos los estados con los datos de dependencias
+                setDepartamentos(dependencias.departamentos || []);
+                setTiposDocumento(dependencias.tipos_documento || []);
+                setTiposProyecto(dependencias.tipos_proyecto || []);
+                setTiposActividad(dependencias.tipos_actividad || []);
+                setBeneficiarios(dependencias.beneficiarios || []);
+                setAutoridades(dependencias.autoridades || []);
+                setResponsables((dependencias.responsables || []).map((item: any) => ({
                     ...item,
                     nombre: `${item.nombre} ${item.apellido_paterno} ${item.apellido_materno}`
                 })));
-
-                const responseCapacitadores = await CapacitadorService.getListCapacitador();
-                setCapacitadores(responseCapacitadores.data);
-
-                const responseProyectos = await ProyectoService.paginateProyecto(page, perPage);
+                setCapacitadores(dependencias.capacitadores || []);
+                
+                // Actualizar proyectos
                 setProyectos(responseProyectos.data);
             } catch (error: any) {
                 showError(error.message || 'Ha ocurrido un error al cargar los datos');
@@ -1241,574 +1276,584 @@ const ProyectoPage = () => {
 
     return (
         <div className="grid">
-          <div className="col-12 md:col-4">
-            <div className="w-full bg-white border border-gray-200 border-round shadow-8 md:shadow-1 dark:bg-gray-800 dark:border-gray-700">
-                <div className="flex items-center py-4 px-4 justify-content-center border-bottom-1 border-gray-200 dark:border-gray-700">
-                    <Button icon="pi pi-plus" label='Agregar proyecto' onClick={onAgregar}></Button>
-                </div>
-                <DataScroller
-                    value={proyectos}
-                    emptyMessage="No hay proyectos disponibles"
-                    itemTemplate={proyectoTemplate}
-                    rows={perPage}
-                    inline
-                    pt={{
-                        content: { className: 'border-none' },
-                        item: { className: 'border-none' }
-                    }}
-                    scrollHeight="calc(85vh - 80px)"
-                    header={
-                        <div className="flex align-items-center justify-content-between p-3 bg-gray-50 dark:bg-gray-900 border-bottom-1 border-gray-200 dark:border-gray-700">
-                            <div className="flex align-items-center gap-2">
-                                <i className="pi pi-list text-primary-600"></i>
-                                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                                    Proyectos ({proyectos.length})
-                                </span>
-                            </div>
-                            {proyectos.length > 0 && (
-                                <Tag 
-                                    value={hasMore ? 'Más disponibles' : 'Todos cargados'} 
-                                    severity={hasMore ? 'warning' : 'success'}
-                                    className="text-xs"
-                                />
-                            )}
-                        </div>
-                    }
-                    footer={
-                        <div className="p-3 bg-gray-50 dark:bg-gray-900 border-top-1 border-gray-200 dark:border-gray-700">
-                            {loading && (
-                                <div className="flex align-items-center justify-content-center gap-2 py-2">
-                                    <ProgressSpinner style={{width: '20px', height: '20px'}} strokeWidth="4" />
-                                    <span className="text-sm text-gray-600 dark:text-gray-400">Cargando proyectos...</span>
-                                </div>
-                            )}
-                            {!loading && hasMore && proyectos.length > 0 && (
-                                <Button 
-                                    label={`Cargar más proyectos (${proyectos.length} de muchos)`}
-                                    icon="pi pi-angle-down"
-                                    outlined
-                                    onClick={loadMoreProyectos}
-                                    className="w-full"
-                                />
-                            )}
-                            {!hasMore && proyectos.length > 0 && (
-                                <div className="text-center py-2">
-                                    <div className="flex align-items-center justify-content-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                        <i className="pi pi-check-circle text-green-500"></i>
-                                        <span>Todos los proyectos han sido cargados ({proyectos.length} total)</span>
-                                    </div>
-                                </div>
-                            )}
-                            {!loading && proyectos.length === 0 && (
-                                <div className="text-center py-6">
-                                    <div className="mb-4">
-                                        <i className="pi pi-folder-open text-6xl text-gray-300 dark:text-gray-600"></i>
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                        No hay proyectos disponibles
-                                    </h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                                        Comienza creando tu primer proyecto para organizar tus actividades
-                                    </p>
-                                    <Button 
-                                        label="Crear primer proyecto" 
-                                        icon="pi pi-plus"
-                                        onClick={onAgregar}
-                                        size="small"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    }
-                    className="border-none"
-                />
-            </div>
-          </div>
-          <div className={`col-12 ${(openPanelProyecto || openPanelActividad) && showDetailPanel ? 'md:col-4' : 'md:col-8'}`}>
-            {(proyectoActivo.uuid && !loadingActividadesProyecto) && (
-                <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800 dark:border-gray-700">
-                    <div className="flex flex-column gap-3 p-4 border-bottom-1 surface-border">
-                        <div className="flex align-items-center justify-content-between w-full">
-                            <div className="flex align-items-center gap-2">
-                                <i className="pi pi-list text-primary text-xl"></i>
-                                <h2 className="m-0 text-primary font-semibold text-xl">Actividades</h2>
-                            </div>
-                            <div className="flex align-items-center gap-3">
-                                <div className="flex align-items-center gap-2 px-3 py-1 border-round bg-primary-50 dark:bg-primary-900">
-                                    <span className="text-sm text-primary-700 dark:text-primary-100">
-                                        {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length}
+          {proyectos.length === 0 && !loading ? (
+            <EmptyStateProject onAddProject={onAgregar} />
+          ) : (
+            <>
+              <div className="col-12 md:col-4">
+                <div className="w-full bg-white border border-gray-200 border-round shadow-8 md:shadow-1 dark:bg-gray-800 dark:border-gray-700">
+                    <div className="flex items-center py-4 px-4 justify-content-center border-bottom-1 border-gray-200 dark:border-gray-700">
+                        <Button icon="pi pi-plus" label='Agregar proyecto' onClick={onAgregar}></Button>
+                    </div>
+                    <DataScroller
+                        value={proyectos}
+                        emptyMessage="No hay proyectos disponibles"
+                        itemTemplate={proyectoTemplate}
+                        rows={perPage}
+                        inline
+                        pt={{
+                            content: { className: 'border-none' },
+                            item: { className: 'border-none' }
+                        }}
+                        scrollHeight="calc(85vh - 80px)"
+                        header={
+                            <div className="flex align-items-center justify-content-between p-3 bg-gray-50 dark:bg-gray-900 border-bottom-1 border-gray-200 dark:border-gray-700">
+                                <div className="flex align-items-center gap-2">
+                                    <i className="pi pi-list text-primary-600"></i>
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                        Proyectos ({proyectos.length})
                                     </span>
-                                    <div className="text-lg font-bold text-primary-800 dark:text-primary-200">
-                                        {calcularAvanceProyecto()}%
-                                    </div>
                                 </div>
-                                {(openPanelProyecto || openPanelActividad) && (
-                                    <Button 
-                                        tooltipOptions={{ position: 'left' }}
-                                        tooltip={showDetailPanel ? "Ocultar panel de detalles" : "Mostrar panel de detalles"}
-                                        icon={showDetailPanel ? "pi pi-angle-double-right" : "pi pi-angle-double-left"} 
-                                        outlined 
-                                        onClick={() => setShowDetailPanel(!showDetailPanel)}
-                                        className="p-button-sm"
+                                {proyectos.length > 0 && (
+                                    <Tag 
+                                        value={hasMore ? 'Más disponibles' : 'Todos cargados'} 
+                                        severity={hasMore ? 'warning' : 'success'}
+                                        className="text-xs"
                                     />
                                 )}
                             </div>
-                        </div>
-                        <div className="w-full">
-                            <ProgressBar 
-                                value={calcularAvanceProyecto()} 
-                                showValue={false}
-                                style={{ height: '6px' }}
-                                className="w-full"
+                        }
+                        footer={
+                            <div className="p-3 bg-gray-50 dark:bg-gray-900 border-top-1 border-gray-200 dark:border-gray-700">
+                                {loading && (
+                                    <div className="flex align-items-center justify-content-center gap-2 py-2">
+                                        <ProgressSpinner style={{width: '20px', height: '20px'}} strokeWidth="4" />
+                                        <span className="text-sm text-gray-600 dark:text-gray-400">Cargando proyectos...</span>
+                                    </div>
+                                )}
+                                {!loading && hasMore && proyectos.length > 0 && (
+                                    <Button 
+                                        label={`Cargar más proyectos (${proyectos.length} de muchos)`}
+                                        icon="pi pi-angle-down"
+                                        outlined
+                                        onClick={loadMoreProyectos}
+                                        className="w-full"
+                                    />
+                                )}
+                                {!hasMore && proyectos.length > 0 && (
+                                    <div className="text-center py-2">
+                                        <div className="flex align-items-center justify-content-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                                            <i className="pi pi-check-circle text-green-500"></i>
+                                            <span>Todos los proyectos han sido cargados ({proyectos.length} total)</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {!loading && proyectos.length === 0 && (
+                                    <div className="text-center py-6">
+                                        <div className="mb-4">
+                                            <i className="pi pi-folder-open text-6xl text-gray-300 dark:text-gray-600"></i>
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                            No hay proyectos disponibles
+                                        </h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                            Comienza creando tu primer proyecto para organizar tus actividades
+                                        </p>
+                                        <Button 
+                                            label="Crear primer proyecto" 
+                                            icon="pi pi-plus"
+                                            onClick={onAgregar}
+                                            size="small"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        }
+                        className="border-none"
+                    />
+                </div>
+              </div>
+              <div className={`col-12 ${(openPanelProyecto || openPanelActividad) && showDetailPanel ? 'md:col-4' : 'md:col-8'}`}>
+                {(proyectoActivo.uuid && !loadingActividadesProyecto) && (
+                    <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800 dark:border-gray-700">
+                        <div className="flex flex-column gap-3 p-4 border-bottom-1 surface-border">
+                            <div className="flex align-items-center justify-content-between w-full">
+                                <div className="flex align-items-center gap-2">
+                                    <i className="pi pi-list text-primary text-xl"></i>
+                                    <h2 className="m-0 text-primary font-semibold text-xl">Actividades</h2>
+                                </div>
+                                <div className="flex align-items-center gap-3">
+                                    <div className="flex align-items-center gap-2 px-3 py-1 border-round bg-primary-50 dark:bg-primary-900">
+                                        <span className="text-sm text-primary-700 dark:text-primary-100">
+                                            {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length}
+                                        </span>
+                                        <div className="text-lg font-bold text-primary-800 dark:text-primary-200">
+                                            {calcularAvanceProyecto()}%
+                                        </div>
+                                    </div>
+                                    {(openPanelProyecto || openPanelActividad) && (
+                                        <Button 
+                                            tooltipOptions={{ position: 'left' }}
+                                            tooltip={showDetailPanel ? "Ocultar panel de detalles" : "Mostrar panel de detalles"}
+                                            icon={showDetailPanel ? "pi pi-angle-double-right" : "pi pi-angle-double-left"} 
+                                            outlined 
+                                            onClick={() => setShowDetailPanel(!showDetailPanel)}
+                                            className="p-button-sm"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                            <div className="w-full">
+                                <ProgressBar 
+                                    value={calcularAvanceProyecto()} 
+                                    showValue={false}
+                                    style={{ height: '6px' }}
+                                    className="w-full"
+                                />
+                            </div>
+                            <Button 
+                                icon="pi pi-plus" 
+                                label='Agregar actividad' 
+                                onClick={onAgregarActividad}
+                                className="p-button-primary p-button-outlined align-self-start"
                             />
                         </div>
-                        <Button 
-                            icon="pi pi-plus" 
-                            label='Agregar actividad' 
-                            onClick={onAgregarActividad}
-                            className="p-button-primary p-button-outlined align-self-start"
-                        />
-                    </div>
-                    <div className="overflow-y-auto" style={{ maxHeight: 'calc(95vh-180px)' }}>
-                        {actividades.length === 0 && (
-                            <div className="flex flex-column align-items-center justify-content-center gap-3 p-6">
-                                <i className="pi pi-list text-6xl text-gray-300 dark:text-gray-600"></i>
-                                <p className="text-gray-600 dark:text-gray-400 text-center">
-                                    No hay actividades registradas para este proyecto.<br/>
-                                    <span className="text-sm">Comienza agregando una nueva actividad.</span>
-                                </p>
-                            </div>
-                        )}
-                        {actividades.map((actividad:any) => (
-                            <Panel
-                                toggleable
-                                collapsed={actividadCollapsed[actividad.uuid] !== undefined ? actividadCollapsed[actividad.uuid] : true}
-                                headerTemplate={(options) => headerPanelActividad(options, actividad)}
-                                expandIcon="pi pi-chevron-down"
-                                collapseIcon="pi pi-chevron-up"
-                                key={actividad.uuid}
-                                className='mx-2 my-2 shadow-1 border-round-lg'
-                                pt={{
-                                    header: { className: 'p-3' },
-                                    content: { className: 'px-3 py-2' },
-                                    root: { className: 'border-none' }
-                                }}
-                                onToggle={(e) => onTogglePanelActividad(e, actividad)} 
-                            >
-                                <div key={actividad.uuid}>
-                                    <ul className='list-none p-0 m-0 flex flex-column gap-2'>
-                                        {(tareasPorActividad[actividad.uuid] || []).map((tarea: any) => (
-                                            <li key={tarea.id} className="flex align-items-center gap-2 p-2 border-round hover:surface-100 transition-colors transition-duration-150">
-                                                <Checkbox   
-                                                    checked={tarea.estatus === 'Completada'}
-                                                    onChange={() => onChangeEstatusActividad(actividad, tarea)}
-                                                    className="flex align-items-center justify-content-center"
-                                                />
-                                                {tarea.editing ? (
+                        <div className="overflow-y-auto" style={{ maxHeight: 'calc(95vh-180px)' }}>
+                            {actividades.length === 0 && (
+                                <div className="flex flex-column align-items-center justify-content-center gap-3 p-6">
+                                    <i className="pi pi-list text-6xl text-gray-300 dark:text-gray-600"></i>
+                                    <p className="text-gray-600 dark:text-gray-400 text-center">
+                                        No hay actividades registradas para este proyecto.<br/>
+                                        <span className="text-sm">Comienza agregando una nueva actividad.</span>
+                                    </p>
+                                </div>
+                            )}
+                            {actividades.map((actividad:any) => (
+                                <Panel
+                                    toggleable
+                                    collapsed={actividadCollapsed[actividad.uuid] !== undefined ? actividadCollapsed[actividad.uuid] : true}
+                                    headerTemplate={(options) => headerPanelActividad(options, actividad)}
+                                    expandIcon="pi pi-chevron-down"
+                                    collapseIcon="pi pi-chevron-up"
+                                    key={actividad.uuid}
+                                    className='mx-2 my-2 shadow-1 border-round-lg'
+                                    pt={{
+                                        header: { className: 'p-3' },
+                                        content: { className: 'px-3 py-2' },
+                                        root: { className: 'border-none' }
+                                    }}
+                                    onToggle={(e) => onTogglePanelActividad(e, actividad)} 
+                                >
+                                    <div key={actividad.uuid}>
+                                        <ul className='list-none p-0 m-0 flex flex-column gap-2'>
+                                            {(tareasPorActividad[actividad.uuid] || []).map((tarea: any) => (
+                                                <li key={tarea.id} className="flex align-items-center gap-2 p-2 border-round hover:surface-100 transition-colors transition-duration-150">
+                                                    <Checkbox   
+                                                        checked={tarea.estatus === 'Completada'}
+                                                        onChange={() => onChangeEstatusActividad(actividad, tarea)}
+                                                        className="flex align-items-center justify-content-center"
+                                                    />
+                                                    {tarea.editing ? (
+                                                        <InputText
+                                                            name={`nombre-${tarea.id}`}
+                                                            id={`nombre-${tarea.id}`}
+                                                            value={tarea.nombre}
+                                                            autoFocus
+                                                            onBlur={async (e) => onBlurTareaActividad(e, actividad, tarea)}
+                                                            onKeyDown={async (e) => onKeyDownTareaActividad(e, actividad, tarea)}
+                                                            onChange={(e) => onChangeTareaActividad(e, actividad, tarea)}
+                                                            className="flex-1"
+                                                        />
+                                                    ) : (
+                                                        <span
+                                                            className={`flex-1 cursor-pointer ${tarea.estatus === 'Completada' ? 'line-through text-gray-500' : ''}`}
+                                                            onDoubleClick={(e) => onDoubleClickTareaActividad(e, actividad, tarea)}
+                                                        >
+                                                            {tarea.nombre}
+                                                        </span>
+                                                    )}
+                                                    <Button
+                                                        icon="pi pi-times"
+                                                        severity="danger"
+                                                        rounded
+                                                        text
+                                                        size="small"
+                                                        onClick={() => onDeleteTareaActividad(actividad, tarea)}
+                                                    />
+                                                </li>
+                                            ))}
+                                            {loadingTareasActividad[actividad.uuid] === false && (
+                                                <li className="flex items-center gap-2 p-2">
                                                     <InputText
-                                                        name={`nombre-${tarea.id}`}
-                                                        id={`nombre-${tarea.id}`}
-                                                        value={tarea.nombre}
+                                                        placeholder="Nueva tarea..."
+                                                        name={`nuevaTareaNombre-${actividad.uuid}`}
+                                                        id={`nuevaTareaNombre-${actividad.uuid}`}
+                                                        value={nuevaTareaActividad[actividad.uuid] || ''}
+                                                        onChange={(e) => onChangeNuevaTareaActividad(e, actividad)}
+                                                        onKeyDown={(e) => onKeyDownNuevaTareaActividad(e, actividad)}
                                                         autoFocus
-                                                        onBlur={async (e) => onBlurTareaActividad(e, actividad, tarea)}
-                                                        onKeyDown={async (e) => onKeyDownTareaActividad(e, actividad, tarea)}
-                                                        onChange={(e) => onChangeTareaActividad(e, actividad, tarea)}
                                                         className="flex-1"
                                                     />
-                                                ) : (
-                                                    <span
-                                                        className={`flex-1 cursor-pointer ${tarea.estatus === 'Completada' ? 'line-through text-gray-500' : ''}`}
-                                                        onDoubleClick={(e) => onDoubleClickTareaActividad(e, actividad, tarea)}
-                                                    >
-                                                        {tarea.nombre}
-                                                    </span>
-                                                )}
-                                                <Button
-                                                    icon="pi pi-times"
-                                                    severity="danger"
-                                                    rounded
-                                                    text
-                                                    size="small"
-                                                    onClick={() => onDeleteTareaActividad(actividad, tarea)}
-                                                />
-                                            </li>
-                                        ))}
-                                        {loadingTareasActividad[actividad.uuid] === false && (
-                                            <li className="flex items-center gap-2 p-2">
-                                                <InputText
-                                                    placeholder="Nueva tarea..."
-                                                    name={`nuevaTareaNombre-${actividad.uuid}`}
-                                                    id={`nuevaTareaNombre-${actividad.uuid}`}
-                                                    value={nuevaTareaActividad[actividad.uuid] || ''}
-                                                    onChange={(e) => onChangeNuevaTareaActividad(e, actividad)}
-                                                    onKeyDown={(e) => onKeyDownNuevaTareaActividad(e, actividad)}
-                                                    autoFocus
-                                                    className="flex-1"
-                                                />
-                                                <Button
-                                                    icon="pi pi-plus"
-                                                    severity="success"
-                                                    rounded
-                                                    text
-                                                    size="small"
-                                                    onClick={(e) => onClickNuevaTareaActividad(e, actividad)}
-                                                />
-                                            </li>
-                                        )}
-                                    </ul>
-                                </div>
-                            </Panel> 
-                        ))}
+                                                    <Button
+                                                        icon="pi pi-plus"
+                                                        severity="success"
+                                                        rounded
+                                                        text
+                                                        size="small"
+                                                        onClick={(e) => onClickNuevaTareaActividad(e, actividad)}
+                                                    />
+                                                </li>
+                                            )}
+                                        </ul>
+                                    </div>
+                                </Panel> 
+                            ))}
+                        </div>
+                    </div>)
+                } 
+                {(!proyectoActivo.uuid && !loadingActividadesProyecto) && (
+                    <EmptyStateActivity />
+                )}
+                {loadingActividadesProyecto && (
+                    <div className="loading-overlay h-full flex justify-content-center align-items-center">
+                        <ProgressSpinner />
                     </div>
-                </div>)
-            }
-            {loadingActividadesProyecto && (
-                <div className="loading-overlay h-full flex justify-content-center align-items-center">
-                    <ProgressSpinner />
-                </div>
-            )}
-          </div>
-        {(openPanelProyecto || openPanelActividad) && showDetailPanel && (
-            <div className='col-12 md:col-4'>
-              { (actividadSeleccionada.uuid && openPanelActividad) && (
-                <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800">
-                    <div className="p-4 border-bottom-1 surface-border">
-                        <div className="flex align-items-center justify-content-between mb-2">
-                            <h2 className="text-xl font-bold m-0 text-primary">{actividadSeleccionada.nombre}</h2>
-                            <Tag value={actividadSeleccionada.prioridad} 
-                                severity={
-                                    actividadSeleccionada.prioridad === 'Alta' 
-                                    ? 'danger' 
-                                    : actividadSeleccionada.prioridad === 'Media' 
-                                    ? 'warning' 
-                                    : 'info'
-                                } 
-                            />
-                        </div>
-                    </div>
-                    
-                    <div className="p-4">
-                        {/* People Section */}
-                        <div className="mb-3">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Participantes</h3>
-                            <div className="grid">
-                                <div className="col-12 mb-2">
-                                    <div className="flex align-items-center gap-2">
-                                        <Avatar label="R" shape="circle" size="normal" className="bg-primary-100 text-primary-700"/>
-                                        <div className="flex flex-column">
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">Responsable</span>
-                                            <span className="font-medium">{actividadSeleccionada.responsable_nombre}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="col-12 mb-2">
-                                    <div className="flex align-items-center gap-2">
-                                        <Avatar label="C" shape="circle" size="normal" className="bg-orange-100 text-orange-700"/>
-                                        <div className="flex flex-column">
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">Capacitador</span>
-                                            <span className="font-medium">{actividadSeleccionada.capacitador_nombre}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="col-12">
-                                    <div className="flex align-items-center gap-2">
-                                        <Avatar label="B" shape="circle" size="normal" className="bg-green-100 text-green-700"/>
-                                        <div className="flex flex-column">
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">Beneficiario</span>
-                                            <span className="font-medium">{actividadSeleccionada.beneficiario_nombre}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Details Section */}
-                        <div className="mb-3">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles</h3>
-                            <div className="grid">
-                                <div className="col-12 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tipo de actividad</span>
-                                    <span className="font-medium">{actividadSeleccionada.tipo_actividad_nombre}</span>
-                                </div>
-                                <div className="col-12 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                        <i className="pi pi-user text-gray-600 mr-2"></i>Persona beneficiada
-                                    </span>
-                                    <span className="font-medium">{actividadSeleccionada.persona_beneficiada}</span>
-                                </div>
-                                <div className="col-12 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prioridad</span>
-                                    <span className="font-medium">{actividadSeleccionada.prioridad}</span>
-                                </div>
-                                <div className="col-12 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Registro NAFIN</span>
-                                    <span className="font-medium">{actividadSeleccionada.registro_nafin || 'No disponible'}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Dates Section */}
-                        <div className="mb-3">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Fechas</h3>
-                            <div className="grid">
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                        <i className="pi pi-calendar text-primary mr-2"></i>Inicio
-                                    </span>
-                                    <span className="font-medium">
-                                        {actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString('es-ES', {
-                                            day: '2-digit',
-                                            month: 'short',
-                                            year: 'numeric',
-                                        }).replace('.', '') : 'No disponible'}
-                                    </span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                        <i className="pi pi-flag text-danger mr-2"></i>Fin
-                                    </span>
-                                    <span className="font-medium">
-                                        {actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString('es-ES', {
-                                            day: '2-digit',
-                                            month: 'short',
-                                            year: 'numeric',
-                                        }).replace('.', '') : 'No disponible'}
-                                    </span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha solicitud constancia</span>
-                                    <span className="font-medium">{actividadSeleccionada.fecha_solicitud_constancia ? new Date(actividadSeleccionada.fecha_solicitud_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío constancia</span>
-                                    <span className="font-medium">{actividadSeleccionada.fecha_envio_constancia ? new Date(actividadSeleccionada.fecha_envio_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha vencimiento envío encuesta</span>
-                                    <span className="font-medium">{actividadSeleccionada.fecha_vencimiento_envio_encuesta ? new Date(actividadSeleccionada.fecha_vencimiento_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío encuesta</span>
-                                    <span className="font-medium">{actividadSeleccionada.fecha_envio_encuesta ? new Date(actividadSeleccionada.fecha_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha inicio difusión banner</span>
-                                    <span className="font-medium">{actividadSeleccionada.fecha_inicio_difusion_banner ? new Date(actividadSeleccionada.fecha_inicio_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
-                                </div>
-                                <div className="col-6 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha fin difusión banner</span>
-                                    <span className="font-medium">{actividadSeleccionada.fecha_fin_difusion_banner ? new Date(actividadSeleccionada.fecha_fin_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Links Section */}
-                        <div className="mb-3">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Enlaces</h3>
-                            <div className="grid">
-                                <div className="col-4">
-                                    <Button
-                                        label="Zoom"
-                                        icon="pi pi-video"
-                                        disabled={!actividadSeleccionada.link_zoom}
-                                        onClick={() => window.open(actividadSeleccionada.link_zoom, '_blank', 'noopener,noreferrer')}
-                                        className="p-button-outlined p-button-rounded w-full"
-                                    />
-                                </div>
-                                <div className="col-4">
-                                    <Button
-                                        label="Registro"
-                                        icon="pi pi-user-plus"
-                                        disabled={!actividadSeleccionada.link_registro}
-                                        onClick={() => window.open(actividadSeleccionada.link_registro, '_blank', 'noopener,noreferrer')}
-                                        className="p-button-outlined p-button-rounded w-full"
-                                    />
-                                </div>
-                                <div className="col-4">
-                                    <Button
-                                        label="Panelista"
-                                        icon="pi pi-users"
-                                        disabled={!actividadSeleccionada.link_panelista}
-                                        onClick={() => window.open(actividadSeleccionada.link_panelista, '_blank', 'noopener,noreferrer')}
-                                        className="p-button-outlined p-button-rounded w-full"
+                )}
+              </div>
+              {(openPanelProyecto || openPanelActividad) && showDetailPanel && (
+                <div className='col-12 md:col-4'>
+                    { (actividadSeleccionada.uuid && openPanelActividad) && (
+                        <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800">
+                            <div className="p-4 border-bottom-1 surface-border">
+                                <div className="flex align-items-center justify-content-between mb-2">
+                                    <h2 className="text-xl font-bold m-0 text-primary">{actividadSeleccionada.nombre}</h2>
+                                    <Tag value={actividadSeleccionada.prioridad} 
+                                        severity={
+                                            actividadSeleccionada.prioridad === 'Alta' 
+                                            ? 'danger' 
+                                            : actividadSeleccionada.prioridad === 'Media' 
+                                            ? 'warning' 
+                                            : 'info'
+                                        } 
                                     />
                                 </div>
                             </div>
-                        </div>
+                            
+                            <div className="p-4">
+                                {/* People Section */}
+                                <div className="mb-3">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Participantes</h3>
+                                    <div className="grid">
+                                        <div className="col-12 mb-2">
+                                            <div className="flex align-items-center gap-2">
+                                                <Avatar label="R" shape="circle" size="normal" className="bg-primary-100 text-primary-700"/>
+                                                <div className="flex flex-column">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Responsable</span>
+                                                    <span className="font-medium">{actividadSeleccionada.responsable_nombre}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="col-12 mb-2">
+                                            <div className="flex align-items-center gap-2">
+                                                <Avatar label="C" shape="circle" size="normal" className="bg-orange-100 text-orange-700"/>
+                                                <div className="flex flex-column">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Capacitador</span>
+                                                    <span className="font-medium">{actividadSeleccionada.capacitador_nombre}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="col-12">
+                                            <div className="flex align-items-center gap-2">
+                                                <Avatar label="B" shape="circle" size="normal" className="bg-green-100 text-green-700"/>
+                                                <div className="flex flex-column">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Beneficiario</span>
+                                                    <span className="font-medium">{actividadSeleccionada.beneficiario_nombre}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
-                        {/* Actions Section */}
-                        <div className="border-top-1 surface-border pt-4">
-                            <div className="grid">
-                                <div className="col-6">
+                                {/* Details Section */}
+                                <div className="mb-3">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles</h3>
+                                    <div className="grid">
+                                        <div className="col-12 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tipo de actividad</span>
+                                            <span className="font-medium">{actividadSeleccionada.tipo_actividad_nombre}</span>
+                                        </div>
+                                        <div className="col-12 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                <i className="pi pi-user text-gray-600 mr-2"></i>Persona beneficiada
+                                            </span>
+                                            <span className="font-medium">{actividadSeleccionada.persona_beneficiada}</span>
+                                        </div>
+                                        <div className="col-12 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prioridad</span>
+                                            <span className="font-medium">{actividadSeleccionada.prioridad}</span>
+                                        </div>
+                                        <div className="col-12 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Registro NAFIN</span>
+                                            <span className="font-medium">{actividadSeleccionada.registro_nafin || 'No disponible'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Dates Section */}
+                                <div className="mb-3">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Fechas</h3>
+                                    <div className="grid">
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                <i className="pi pi-calendar text-primary mr-2"></i>Inicio
+                                            </span>
+                                            <span className="font-medium">
+                                                {actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString('es-ES', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                }).replace('.', '') : 'No disponible'}
+                                            </span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                <i className="pi pi-flag text-danger mr-2"></i>Fin
+                                            </span>
+                                            <span className="font-medium">
+                                                {actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString('es-ES', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                }).replace('.', '') : 'No disponible'}
+                                            </span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha solicitud constancia</span>
+                                            <span className="font-medium">{actividadSeleccionada.fecha_solicitud_constancia ? new Date(actividadSeleccionada.fecha_solicitud_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío constancia</span>
+                                            <span className="font-medium">{actividadSeleccionada.fecha_envio_constancia ? new Date(actividadSeleccionada.fecha_envio_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha vencimiento envío encuesta</span>
+                                            <span className="font-medium">{actividadSeleccionada.fecha_vencimiento_envio_encuesta ? new Date(actividadSeleccionada.fecha_vencimiento_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío encuesta</span>
+                                            <span className="font-medium">{actividadSeleccionada.fecha_envio_encuesta ? new Date(actividadSeleccionada.fecha_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha inicio difusión banner</span>
+                                            <span className="font-medium">{actividadSeleccionada.fecha_inicio_difusion_banner ? new Date(actividadSeleccionada.fecha_inicio_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                        </div>
+                                        <div className="col-6 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha fin difusión banner</span>
+                                            <span className="font-medium">{actividadSeleccionada.fecha_fin_difusion_banner ? new Date(actividadSeleccionada.fecha_fin_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Links Section */}
+                                <div className="mb-3">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Enlaces</h3>
+                                    <div className="grid">
+                                        <div className="col-4">
+                                            <Button
+                                                label="Zoom"
+                                                icon="pi pi-video"
+                                                disabled={!actividadSeleccionada.link_zoom}
+                                                onClick={() => window.open(actividadSeleccionada.link_zoom, '_blank', 'noopener,noreferrer')}
+                                                className="p-button-outlined p-button-rounded w-full"
+                                            />
+                                        </div>
+                                        <div className="col-4">
+                                            <Button
+                                                label="Registro"
+                                                icon="pi pi-user-plus"
+                                                disabled={!actividadSeleccionada.link_registro}
+                                                onClick={() => window.open(actividadSeleccionada.link_registro, '_blank', 'noopener,noreferrer')}
+                                                className="p-button-outlined p-button-rounded w-full"
+                                            />
+                                        </div>
+                                        <div className="col-4">
+                                            <Button
+                                                label="Panelista"
+                                                icon="pi pi-users"
+                                                disabled={!actividadSeleccionada.link_panelista}
+                                                onClick={() => window.open(actividadSeleccionada.link_panelista, '_blank', 'noopener,noreferrer')}
+                                                className="p-button-outlined p-button-rounded w-full"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Actions Section */}
+                                <div className="border-top-1 surface-border pt-4">
+                                    <div className="grid">
+                                        <div className="col-6">
+                                            <Button 
+                                                icon="pi pi-trash" 
+                                                severity="danger" 
+                                                label="Eliminar" 
+                                                className="p-button-outlined w-full"
+                                                onClick={(event) => onDeleteActividad(event, { itemData: actividadSeleccionada })}
+                                            />
+                                        </div>
+                                        <div className="col-6">
+                                            <Button 
+                                                icon="pi pi-pencil" 
+                                                severity="warning" 
+                                                label="Editar"
+                                                className="p-button-outlined w-full" 
+                                                onClick={() => onEditActividad({ item: { itemData: actividadSeleccionada }})}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        )
+                    }
+                    {(proyectoActivo.uuid && openPanelProyecto && !openPanelActividad && !loadingActividadesProyecto) && (
+                        <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800">
+                            <div className="p-4 border-bottom-1 surface-border">
+                                <div className="flex align-items-center justify-content-between mb-2">
+                                    <h2 className="text-xl font-bold m-0 text-primary">{proyectoActivo.nombre}</h2>
+                                </div>
+                            </div>
+                            
+                            <div className="p-4">
+                                {/* Project Progress Section */}
+                                <div className="mb-4">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Progreso del Proyecto</h3>
+                                    <div className="flex align-items-center justify-content-between mb-2">
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                                            {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length} actividades completadas
+                                        </span>
+                                        <span className="text-lg font-bold text-primary-600">
+                                            {calcularAvanceProyecto()}%
+                                        </span>
+                                    </div>
+                                    <ProgressBar 
+                                        value={calcularAvanceProyecto()} 
+                                        showValue={false}
+                                        style={{ height: '8px' }}
+                                    />
+                                </div>
+
+                                {/* Project Details Section */}
+                                <div className="mb-4">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles del Proyecto</h3>
+                                    <div className="grid">
+                                        <div className="col-12 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                <i className="pi pi-tag text-primary-600 mr-2"></i>Tipo de proyecto
+                                            </span>
+                                            <span className="font-medium">{ proyectoActivo.tipo_proyecto_nombre }</span>
+                                        </div>
+                                        <div className="col-12 mb-3">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                <i className="pi pi-building text-orange-500 mr-2"></i>Departamento
+                                            </span>
+                                            <span className="font-medium">{ proyectoActivo.departamento_nombre }</span>
+                                        </div>
+                                        <div className="col-12">
+                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                <i className="pi pi-file-edit text-green-500 mr-2"></i>Descripción
+                                            </span>
+                                            <p className="font-medium m-0">{ proyectoActivo.descripcion }</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Activity Summary Section */}
+                                <div className="mb-4">
+                                    <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Resumen de Actividades</h3>
+                                    <div className="grid">
+                                        <div className="col-6">
+                                            <div className="p-3 border-round bg-primary-50 dark:bg-primary-900">
+                                                <div className="text-sm text-primary-600 mb-1">Total</div>
+                                                <div className="text-xl font-bold text-primary-700">{actividades.length}</div>
+                                            </div>
+                                        </div>
+                                        <div className="col-6">
+                                            <div className="p-3 border-round bg-green-50 dark:bg-green-900">
+                                                <div className="text-sm text-green-600 mb-1">Completadas</div>
+                                                <div className="text-xl font-bold text-green-700">
+                                                    {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Actions Section */}
+                                <div className="border-top-1 surface-border pt-4 flex justify-content-between gap-2">
                                     <Button 
                                         icon="pi pi-trash" 
                                         severity="danger" 
-                                        label="Eliminar" 
-                                        className="p-button-outlined w-full"
-                                        onClick={(event) => onDeleteActividad(event, { itemData: actividadSeleccionada })}
+                                        label="Eliminar"
+                                        className="p-button-outlined"
+                                        loading={deletingRows[proyectoActivo.uuid] || false}
+                                        onClick={(event) => handleDelete(event, { data: proyectoActivo })}
                                     />
-                                </div>
-                                <div className="col-6">
                                     <Button 
                                         icon="pi pi-pencil" 
                                         severity="warning" 
                                         label="Editar"
-                                        className="p-button-outlined w-full" 
-                                        onClick={() => onEditActividad({ item: { itemData: actividadSeleccionada }})}
+                                        className="p-button-outlined"
+                                        onClick={() => onEditProyecto({ data: proyectoActivo })}
                                     />
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-                )
-              }
-              {(proyectoActivo.uuid && openPanelProyecto && !openPanelActividad && !loadingActividadesProyecto) && (
-                <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800">
-                    <div className="p-4 border-bottom-1 surface-border">
-                        <div className="flex align-items-center justify-content-between mb-2">
-                            <h2 className="text-xl font-bold m-0 text-primary">{proyectoActivo.nombre}</h2>
-                        </div>
-                    </div>
+                        </div>  
+                    )}
+                </div>)
+               }
+
+               
+            </>
+          )}
+           <FormularioProyecto 
+                        visible={visibleFormulario}
+                        onHide={() => setVisibleFormulario(false)}
+                        initialData={formularioProyecto}
+                        onSave={handleSaveData}
+                        loading={loadingGuardar}
+                        errors={formularioErrors}
+                        setFieldValue={(field, value) => {
+                            handleFormularioChange({
+                                target: {
+                                    name: field,
+                                    value: value
+                                }
+                            });
+                        }}
+                        tiposProyecto={tiposProyecto}
+                        departamentos={departamentos}
+                />
+                <FormularioActividad 
+                        visible={visibleFormularioActividad} 
+                        onHide={() => setVisibleFormularioActividad(false)} 
+                        initialData={formularioActividad} 
+                        onSave={handleSaveDataActividad} 
+                        loading={loadingGuardarActividad} 
+                        errors={formularioActividadErrors}
+                        setFieldValue={(field, value) => {
+                            setFormularioActividad((prev:any) => ({
+                                ...prev,
+                                [field]: value
+                            }));
+                        }}
+                        tiposActividad={tiposActividad}
+                        beneficiarios={beneficiarios}
+                        autoridades={autoridades}
+                        responsables={responsables}
+                        capacitadores={capacitadores}
+                        tiposBeneficiados={tiposBeneficiados}
+                        prioridades={prioridades}
+                    />
                     
-                    <div className="p-4">
-                        {/* Project Progress Section */}
-                        <div className="mb-4">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Progreso del Proyecto</h3>
-                            <div className="flex align-items-center justify-content-between mb-2">
-                                <span className="text-sm text-gray-600 dark:text-gray-300">
-                                    {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length} actividades completadas
-                                </span>
-                                <span className="text-lg font-bold text-primary-600">
-                                    {calcularAvanceProyecto()}%
-                                </span>
-                            </div>
-                            <ProgressBar 
-                                value={calcularAvanceProyecto()} 
-                                showValue={false}
-                                style={{ height: '8px' }}
-                            />
-                        </div>
-
-                        {/* Project Details Section */}
-                        <div className="mb-4">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles del Proyecto</h3>
-                            <div className="grid">
-                                <div className="col-12 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                        <i className="pi pi-tag text-primary-600 mr-2"></i>Tipo de proyecto
-                                    </span>
-                                    <span className="font-medium">{ proyectoActivo.tipo_proyecto_nombre }</span>
-                                </div>
-                                <div className="col-12 mb-3">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                        <i className="pi pi-building text-orange-500 mr-2"></i>Departamento
-                                    </span>
-                                    <span className="font-medium">{ proyectoActivo.departamento_nombre }</span>
-                                </div>
-                                <div className="col-12">
-                                    <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                        <i className="pi pi-file-edit text-green-500 mr-2"></i>Descripción
-                                    </span>
-                                    <p className="font-medium m-0">{ proyectoActivo.descripcion }</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Activity Summary Section */}
-                        <div className="mb-4">
-                            <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Resumen de Actividades</h3>
-                            <div className="grid">
-                                <div className="col-6">
-                                    <div className="p-3 border-round bg-primary-50 dark:bg-primary-900">
-                                        <div className="text-sm text-primary-600 mb-1">Total</div>
-                                        <div className="text-xl font-bold text-primary-700">{actividades.length}</div>
-                                    </div>
-                                </div>
-                                <div className="col-6">
-                                    <div className="p-3 border-round bg-green-50 dark:bg-green-900">
-                                        <div className="text-sm text-green-600 mb-1">Completadas</div>
-                                        <div className="text-xl font-bold text-green-700">
-                                            {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Actions Section */}
-                        <div className="border-top-1 surface-border pt-4 flex justify-content-between gap-2">
-                            <Button 
-                                icon="pi pi-trash" 
-                                severity="danger" 
-                                label="Eliminar"
-                                className="p-button-outlined"
-                                loading={deletingRows[proyectoActivo.uuid] || false}
-                                onClick={(event) => handleDelete(event, { data: proyectoActivo })}
-                            />
-                            <Button 
-                                icon="pi pi-pencil" 
-                                severity="warning" 
-                                label="Editar"
-                                className="p-button-outlined"
-                                onClick={() => onEditProyecto({ data: proyectoActivo })}
-                            />
-                        </div>
-                    </div>
-                </div>  
-              )}
-          </div>)}
-
-          <FormularioProyecto 
-                visible={visibleFormulario}
-                onHide={() => setVisibleFormulario(false)}
-                initialData={formularioProyecto}
-                onSave={handleSaveData}
-                loading={loadingGuardar}
-                errors={formularioErrors}
-                setFieldValue={(field, value) => {
-                    handleFormularioChange({
-                        target: {
-                            name: field,
-                            value: value
-                        }
-                    });
-                }}
-                tiposProyecto={tiposProyecto}
-                departamentos={departamentos}
-          />
-          <FormularioActividad 
-                visible={visibleFormularioActividad} 
-                onHide={() => setVisibleFormularioActividad(false)} 
-                initialData={formularioActividad} 
-                onSave={handleSaveDataActividad} 
-                loading={loadingGuardarActividad} 
-                errors={formularioActividadErrors}
-                setFieldValue={(field, value) => {
-                    setFormularioActividad((prev:any) => ({
-                        ...prev,
-                        [field]: value
-                    }));
-                }}
-                tiposActividad={tiposActividad}
-                beneficiarios={beneficiarios}
-                autoridades={autoridades}
-                responsables={responsables}
-                capacitadores={capacitadores}
-                tiposBeneficiados={tiposBeneficiados}
-                prioridades={prioridades}
-            />
-            
-            {/* Repositorio de Documentos */}
-          <RepositorioDocumentos
-                visible={visibleRepositorioDocumentos}
-                onHide={() => setVisibleRepositorioDocumentos(false)}
-                actividad={actividadSeleccionada}
-                tiposDocumento={tiposDocumento}
-                onUploadDocument={handleUploadDocumento}
-                onDeleteDocument={handleDeleteDocumento}
-                onDownloadDocument={handleDownloadDocumento}
-            />
+                <RepositorioDocumentos
+                        visible={visibleRepositorioDocumentos}
+                        onHide={() => setVisibleRepositorioDocumentos(false)}
+                        actividad={actividadSeleccionada}
+                        tiposDocumento={tiposDocumento}
+                        onUploadDocument={handleUploadDocumento}
+                        onDeleteDocument={handleDeleteDocumento}
+                        onDownloadDocument={handleDownloadDocumento}
+                    />
         </div>
     );
 };

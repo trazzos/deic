@@ -115,6 +115,7 @@ const FormularioActividad = ({
                                         options={prioridades}
                                         optionLabel="label"
                                         optionValue="value"
+                                        onChange={(e) => setFieldValue(e.target.name, e.value)} 
                                         className={errors.prioridad ? 'p-invalid' : ''}
                                         placeholder="Seleccione prioridad"
                                     />
