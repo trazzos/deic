@@ -7,7 +7,8 @@ import { Tree } from "primereact/tree";
 
 export interface PermisoNode {
   key: string;
-  label: string;
+  title: string;
+  name: string;
   children?: PermisoNode[];
 }
 

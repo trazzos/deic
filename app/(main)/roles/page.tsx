@@ -1,277 +1,33 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { Button } from "primereact/button";
 import { Tag } from "primereact/tag";
-import dynamic from "next/dynamic";
-import { PermisoNode } from "./componentes/FormularioRol";
 import { InputText } from "primereact/inputtext";
 import { TreeTable } from "primereact/treetable";
 import { Column } from "primereact/column";
 import { TreeNode } from "primereact/treenode";
+import { confirmPopup } from "primereact/confirmpopup";
+import { BreadCrumb } from "primereact/breadcrumb";
+import { MenuItem } from "primereact/menuitem";
 
-// Nuevo árbol de permisos más realista y anidado
-const permisosTree: PermisoNode[] = [
-	{
-		key: "configuracion",
-		label: "Configuración",
-		children: [
-			{
-				key: "catalogos",
-				label: "Catálogos",
-				children: [
-				
-					// Nuevos subcatálogos
-					{
-						key: "autoridades",
-						label: "Autoridades",
-						children: [
-							{ key: "autoridades.list", label: "Listar" },
-							{ key: "autoridades.create", label: "Agregar" },
-							{ key: "autoridades.edit", label: "Editar" },
-							{ key: "autoridades.delete", label: "Eliminar" },
-						],
-					},
-					{
-						key: "beneficiarios",
-						label: "Beneficiarios",
-						children: [
-							{ key: "beneficiarios.list", label: "Listar" },
-							{ key: "beneficiarios.create", label: "Agregar" },
-							{ key: "beneficiarios.edit", label: "Editar" },
-							{ key: "beneficiarios.delete", label: "Eliminar" },
-						],
-					},
-					{
-						key: "capacitadores",
-						label: "Capacitadores",
-						children: [
-							{ key: "capacitadores.list", label: "Listar" },
-							{ key: "capacitadores.create", label: "Agregar" },
-							{ key: "capacitadores.edit", label: "Editar" },
-							{ key: "capacitadores.delete", label: "Eliminar" },
-						],
-					},
-					{
-						key: "departamentos",
-						label: "Departamentos",
-						children: [
-							{ key: "departamentos.list", label: "Listar" },
-							{ key: "departamentos.create", label: "Agregar" },
-							{ key: "departamentos.edit", label: "Editar" },
-							{ key: "departamentos.delete", label: "Eliminar" },
-						],
-					},
-					{
-						key: "tipos_actividad",
-						label: "Tipos de actividad",
-						children: [
-							{ key: "tipos_actividad.list", label: "Listar" },
-							{ key: "tipos_actividad.create", label: "Agregar" },
-							{ key: "tipos_actividad.edit", label: "Editar" },
-							{ key: "tipos_actividad.delete", label: "Eliminar" },
-						],
-					},
-					{
-						key: "tipos_documento",
-						label: "Tipos de documento",
-						children: [
-							{ key: "tipos_documento.list", label: "Listar" },
-							{ key: "tipos_documento.create", label: "Agregar" },
-							{ key: "tipos_documento.edit", label: "Editar" },
-							{ key: "tipos_documento.delete", label: "Eliminar" },
-						],
-					},
-					{
-						key: "tipos_proyecto",
-						label: "Tipos de proyecto",
-						children: [
-							{ key: "tipos_proyecto.list", label: "Listar" },
-							{ key: "tipos_proyecto.create", label: "Agregar" },
-							{ key: "tipos_proyecto.edit", label: "Editar" },
-							{ key: "tipos_proyecto.delete", label: "Eliminar" },
-						],
-					},
-				],
-			},
-			{
-				key: "roles",
-				label: "Roles de usuario",
-				children: [
-					{ key: "roles.create", label: "Agregar" },
-					{ key: "roles.edit", label: "Editar" },
-					{ key: "roles.delete", label: "Eliminar" },
-				],
-			},
-			{
-				key: "personas",
-				label: "Personas",
-				children: [
-					{ key: "personas.create", label: "Agregar" },
-					{ key: "personas.edit", label: "Editar" },
-					{ key: "personas.delete", label: "Eliminar" },
-				],
-			},
-		],
-	},
-	{
-		key: "proyectos",
-		label: "Proyectos y actividades",
-		children: [
-			{ key: "proyectos.create", label: "Agregar" },
-			{ key: "proyectos.edit", label: "Editar" },
-			{ key: "proyectos.delete", label: "Eliminar" },
-			{ key: "proyectos.actividades", label: "Actividades" },
-		],
-	},
-	{
-		key: "reportes",
-		label: "Reportes",
-		children: [
-			{ key: "reportes.view", label: "Ver reportes" },
-			{ key: "reportes.export", label: "Exportar" },
-		],
-	},
-];
+import type { PermisoNode, Role } from '@/types/role';
 
-const initialRoles: {
-	id: number;
-	nombre: string;
-	permisos: string[];
-	color: "primary" | "info" | "success";
-}[] = [
-	{
-		id: 1,
-		nombre: "Administrador",
-		permisos: ["dashboard", "usuarios", "configuracion"],
-		color: "primary",
-	},
-	{ id: 2, nombre: "Editor", permisos: ["dashboard.view", "usuarios.edit"], color: "info" },
-	{ id: 3, nombre: "Consulta", permisos: ["dashboard.view"], color: "success" },
-];
-
-interface Role {
-	id: number;
-	nombre: string;
-	permisos: string[];
-	color: "primary" | "info" | "success";
-}
-
-// Utilidad para aplanar todos los permisos hoja (leaf) con su path completo
-function flattenRBAC(tree: PermisoNode[], parentPath: string[] = []): { path: string[]; key: string; label: string }[] {
-	let result: { path: string[]; key: string; label: string }[] = [];
-	for (const node of tree) {
-		const currentPath = [...parentPath, node.label];
-		if (node.children && node.children.length > 0) {
-			result = result.concat(flattenRBAC(node.children, currentPath));
-		} else {
-			result.push({ path: currentPath, key: node.key, label: node.label });
-		}
-	}
-	return result;
-}
+// Los permisos ahora se cargan desde el servidor
+import { useNotification } from '@/layout/context/notificationContext';
+import { RoleService } from '@/src/services/catalogos/role';
 
 // Utilidad para convertir PermisoNode[] a TreeNode[] para TreeTable
 function permisoNodesToTreeNodes(nodes: PermisoNode[]): TreeNode[] {
 	return nodes.map((node) => ({
-		key: node.key,
-		data: { label: node.label, isTitle: !node.children || node.children.length === 0 ? false : true },
+		key: node.name,
+		data: { 
+			label: node.title, 
+			name: node.name,
+			key: node.key,
+			isTitle: node.children && node.children.length > 0 
+		},
 		children: node.children ? permisoNodesToTreeNodes(node.children) : undefined,
 	}));
-}
-
-// Renderiza una matriz RBAC: módulos (primer nivel) como columnas, acciones (CRUD) como filas, submódulos agrupados
-function getRBACMatrix(
-	permisosTree: PermisoNode[],
-	rolPermisos: string[],
-	onPermChange: (permKey: string, checked: boolean) => void
-) {
-	// Agrupa por módulo y acción
-	const flat = flattenRBAC(permisosTree);
-	// Encuentra todos los módulos (primer nivel)
-	const modulos = permisosTree.map((m) => m.label);
-	// Encuentra todas las acciones (CRUD) posibles
-	const acciones = Array.from(new Set(flat.map((p) => p.label)));
-	// Agrupa por submódulo si existe (segundo nivel)
-	const submodulos: { modulo: string; submodulo?: string }[] = [];
-	permisosTree.forEach((modulo) => {
-		if (modulo.children) {
-			modulo.children.forEach((sub) => {
-				if (sub.children) {
-					submodulos.push({ modulo: modulo.label, submodulo: sub.label });
-				} else {
-					submodulos.push({ modulo: modulo.label });
-				}
-			});
-		}
-	});
-	// Agrupa por submódulo para filas
-	const filas: { modulo: string; submodulo?: string; acciones: { key: string; label: string }[] }[] = [];
-	permisosTree.forEach((modulo) => {
-		if (modulo.children) {
-			modulo.children.forEach((sub) => {
-				if (sub.children) {
-					filas.push({
-						modulo: modulo.label,
-						submodulo: sub.label,
-						acciones: sub.children.map((perm) => ({ key: perm.key, label: perm.label })),
-					});
-				} else {
-					filas.push({
-						modulo: modulo.label,
-						acciones: [{ key: sub.key, label: sub.label }],
-					});
-				}
-			});
-		}
-	});
-	// También agrega los permisos directos bajo módulo (sin submódulo)
-	permisosTree.forEach((modulo) => {
-		if (modulo.children) {
-			const directPerms = modulo.children.filter((sub) => !sub.children);
-			if (directPerms.length > 0) {
-				filas.push({ modulo: modulo.label, acciones: directPerms.map((perm) => ({ key: perm.key, label: perm.label })) });
-			}
-		}
-	});
-	return (
-		<div className="overflow-x-auto">
-			<table className="w-full border-separate border-spacing-0">
-				{/* Header eliminado para diseño más limpio */}
-				<tbody>
-					{filas.map((fila, idx) => (
-						fila.acciones.map((accion, i) => (
-							<tr key={fila.modulo + (fila.submodulo || "") + accion.key}>
-								{i === 0 && (
-									<td rowSpan={fila.acciones.length} className="px-2 py-2 text-sm text-gray-700 bg-white border-bottom-1 surface-border align-top">
-										{fila.modulo}
-									</td>
-								)}
-								{i === 0 && (
-									<td rowSpan={fila.acciones.length} className="px-2 py-2 text-sm text-gray-700 bg-white border-bottom-1 surface-border align-top">
-										{fila.submodulo || "-"}
-									</td>
-								)}
-								<td className="px-2 py-2 text-sm text-gray-700 bg-white border-bottom-1 surface-border">{accion.label}</td>
-								<td className="text-center align-middle bg-white border-bottom-1 surface-border">
-									<label className="inline-flex items-center cursor-pointer">
-										<input
-											type="checkbox"
-											checked={rolPermisos.includes(accion.key)}
-											onChange={e => onPermChange(accion.key, e.target.checked)}
-											className="hidden"
-										/>
-										<span className={`w-6 h-6 flex items-center justify-center rounded border transition-all duration-150 ${rolPermisos.includes(accion.key) ? 'bg-violet-500 border-violet-500' : 'bg-gray-100 border-gray-300'}`}>
-											{rolPermisos.includes(accion.key) && <i className="pi pi-check text-white text-xs"></i>}
-										</span>
-									</label>
-								</td>
-							</tr>
-						))
-					))}
-				</tbody>
-			</table>
-		</div>
-	);
 }
 
 function PermisosTreeTable({
@@ -284,29 +40,51 @@ function PermisosTreeTable({
 	onSelectionChange: (keys: { [key: string]: boolean }) => void;
 }) {
 	const treeNodes = permisoNodesToTreeNodes(permisosTree);
+
+	// Convertir selectedKeys al formato esperado por TreeTable con propagación
+	const treeTableSelectedKeys = React.useMemo(() => {
+		const converted: { [key: string]: { checked: boolean } } = {};
+		Object.keys(selectedKeys).forEach(key => {
+			if (selectedKeys[key]) {
+				converted[key] = { checked: true };
+			}
+		});
+		return converted;
+	}, [selectedKeys]);
+
 	const handleSelectionChange = (e: any) => {
 		const raw = e.value || {};
 		const clean: { [key: string]: boolean } = {};
+		
+		// Procesamos las selecciones del TreeTable
 		Object.keys(raw).forEach(k => {
-			clean[k] = !!raw[k] && (typeof raw[k] === 'boolean' ? raw[k] : raw[k].checked === true);
+			const value = raw[k];
+			if (value === true || (typeof value === 'object' && value.checked === true)) {
+				clean[k] = true;
+			}
 		});
+		
 		onSelectionChange(clean);
 	};
+
 	const nodeTemplate = (node: any) => {
 		const label = node.data?.label || node.label;
 		if (node.data.isTitle) {
 			return <span className="font-semibold text-primary-700 text-base">{label}</span>;
 		}
-		return <span className="text-sm text-gray-800">{label}</span>;
+		return <span className="text-gray-800">{label}</span>;
 	};
+
 	return (
 		<div className="bg-white p-0">
 			<style>{`.p-treetable-thead { display: none !important; }`}</style>
 			<TreeTable
 				value={treeNodes}
 				selectionMode="checkbox"
-				selectionKeys={selectedKeys}
+				selectionKeys={treeTableSelectedKeys}
 				onSelectionChange={handleSelectionChange}
+				propagateSelectionUp={true}
+				propagateSelectionDown={true}
 				scrollable
 				style={{ minWidth: 400 }}
 				className="p-treetable-sm border-none shadow-none"
@@ -324,76 +102,201 @@ function PermisosTreeTable({
 }
 
 export default function RolesPage() {
-	const [roles, setRoles] = useState<Role[]>(initialRoles);
+	const { showSuccess, showError } = useNotification();
+	const [loading, setLoading] = useState(false);
+	const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
+	const [roles, setRoles] = useState<Role[]>([]);
 	const [expanded, setExpanded] = useState<{ [id: number]: boolean }>({});
 	const [nuevoRol, setNuevoRol] = useState("");
+	const [permisosTree, setPermisosTree] = useState<PermisoNode[]>([]);
 	const [permisosSeleccionados, setPermisosSeleccionados] = useState<{ [roleId: number]: { [key: string]: boolean } }>({});
 
-	// Sincroniza los permisos seleccionados con el estado de roles
-	React.useEffect(() => {
-		const map: { [roleId: number]: { [key: string]: boolean } } = {};
-		roles.forEach(role => {
-			map[role.id] = {};
-			role.permisos.forEach(key => { map[role.id][key] = true; });
-		});
-		setPermisosSeleccionados(map);
-	}, [roles]);
+	// Ref para el debounce timeout
+	const debounceTimeoutRef = useRef<{ [roleId: number]: NodeJS.Timeout }>({});
 
+	// Cargar datos iniciales
+	const fetchInitialData = useCallback(async () => {
+		try {
+			setLoading(true);
+			const [rolesResponse, permisosResponse] = await Promise.all([
+				RoleService.getListRoles(),
+				RoleService.getListPermisos()
+			]);
+			
+			setRoles(rolesResponse.data);
+			setPermisosTree(permisosResponse.data);
+						
+			// Sincronizar permisos seleccionados usando las claves correctas
+			const map: { [roleId: number]: { [key: string]: boolean } } = {};
+			rolesResponse.data.forEach((role: Role) => {
+				map[role.id] = {};
+				// Los permisos vienen como strings que corresponden a los nombres (name) de los nodos
+				role.permisos.forEach(permisoKey => { 
+					map[role.id][permisoKey] = true; 
+				});
+			});
+			setPermisosSeleccionados(map);
+		} catch (error: any) {
+			showError(error.message || 'Error al cargar los datos');
+		} finally {
+			setLoading(false);
+		}
+	}, [showError]);
+
+	// useEffect para cargar datos al montar el componente
+	React.useEffect(() => {
+		fetchInitialData();
+	}, []);	
+
+	// Cleanup de timeouts al desmontar el componente
+	React.useEffect(() => {
+		return () => {
+			Object.values(debounceTimeoutRef.current).forEach(timeout => {
+				if (timeout) clearTimeout(timeout);
+			});
+		};
+	}, []);	
+	
 	const toggleExpand = (id: number) => {
 		setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 	};
 
-	const handleDelete = (role: Role) => {
-		setRoles((prev) => prev.filter((r) => r.id !== role.id));
+	const handleDelete = async (event:any, role: Role) => {
+
+		confirmPopup({
+						target: event.currentTarget,
+						message: '¿Esta seguro de realizar esta acción?',
+						icon: 'pi pi-exclamation-triangle',
+						acceptLabel: 'Si',
+						rejectLabel: 'No',
+						accept: async () => {
+							try {
+								await RoleService.deleteRole(role.id);
+								setRoles((prev) => prev.filter((r) => r.id !== role.id));
+								showSuccess('Rol eliminado correctamente');
+							} catch (error: any) {
+								showError(error.message || 'Error al eliminar el rol');
+							}  
+						},
+					});
+		
 	};
 
-	const handlePermChange = (roleId: number, permKey: string, checked: boolean) => {
-		setRoles(prev => prev.map(role => {
-			if (role.id !== roleId) return role;
-			const permisos = checked
-				? Array.from(new Set([...role.permisos, permKey]))
-				: role.permisos.filter(p => p !== permKey);
-			return { ...role, permisos };
-		}));
-	};
-
-	const handleAddRol = () => {
+	const handleAddRol = async () => {
 		if (nuevoRol.trim()) {
-			setRoles(prev => [
-				...prev,
-				{ id: Date.now(), nombre: nuevoRol.trim(), permisos: [], color: "info" },
-			]);
-			setNuevoRol("");
+			try {
+				const response = await RoleService.createRole({
+					nombre: nuevoRol.trim(),
+					permisos: []
+				});
+				setRoles(prev => [...prev, response.data]);
+				setNuevoRol("");
+				showSuccess('Rol creado correctamente');
+			} catch (error: any) {
+				showError(error.message || 'Error al crear el rol');
+			}
 		}
 	};
 
-	const handlePermTreeChange = (roleId: number, keys: { [key: string]: boolean }) => {
+	// Función para guardar permisos sin debounce (la que realmente hace el request)
+	const savePermissions = useCallback(async (roleId: number, keys: { [key: string]: boolean }) => {
+		try {
+			setSavingRoleId(roleId);
+			const selectedPermisos = Object.keys(keys).filter(k => keys[k]);
+			const response = await RoleService.updateRole(roleId, {
+				nombre: roles.find(r => r.id === roleId)?.nombre || "",
+				permisos: selectedPermisos
+			});
+			
+			setRoles(prev => prev.map(role => {
+				if (role.id !== roleId) return role;
+				return { ...role, permisos: selectedPermisos };
+			}));
+			
+			showSuccess('Permisos actualizados correctamente');
+		} catch (error: any) {
+			showError(error.message || 'Error al actualizar los permisos');
+		} finally {
+			setSavingRoleId(null);
+		}
+	}, [roles, showSuccess, showError]);
+
+	// Función con debounce para manejar cambios en permisos
+	const handlePermTreeChange = useCallback((roleId: number, keys: { [key: string]: boolean }) => {
+		// Actualizar inmediatamente el estado local para que la UI responda
 		setPermisosSeleccionados(prev => ({ ...prev, [roleId]: keys }));
-		setRoles(prev => prev.map(role => {
-			if (role.id !== roleId) return role;
-			return { ...role, permisos: Object.keys(keys).filter(k => keys[k]) };
-		}));
-	};
+		
+		// Cancelar el timeout anterior si existe
+		if (debounceTimeoutRef.current[roleId]) {
+			clearTimeout(debounceTimeoutRef.current[roleId]);
+		}
+		
+		// Crear nuevo timeout para guardar después de 1 segundo
+		debounceTimeoutRef.current[roleId] = setTimeout(() => {
+			savePermissions(roleId, keys);
+		}, 1000);
+	}, [savePermissions]);
+
+	// Breadcrumb items
+	const breadcrumbItems: MenuItem[] = [
+		{ label: 'Gestión de cuentas', icon: 'pi pi-users' },
+		{ label: 'Roles de usuario', icon: 'pi pi-shield' }
+	];
+	const breadcrumbHome: MenuItem = { icon: 'pi pi-home', command: () => window.location.href = '/' };
 
 	return (
 		<div className="grid">
-			<div className="col-12 md:col-8 mx-auto">
+			<div className="col-12 mx-auto">
+				<div className="mb-4 p-4 border-round-lg bg-gradient-to-r from-blue-50 to-indigo-50 border-1 border-blue-100 shadow-1">
+					<style>{`
+						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+							color: #1e40af !important;
+							text-decoration: none;
+						}
+						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+							color: #1d4ed8 !important;
+						}
+						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-separator {
+							color: #64748b !important;
+						}
+						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+							color: #3b82f6 !important;
+						}
+					`}</style>
+					<BreadCrumb 
+						model={breadcrumbItems} 
+						home={breadcrumbHome}
+						className="custom-breadcrumb bg-transparent border-none p-0"
+					/>
+					<div className="mt-3">
+						<h5 className="font-bold text-blue-800 m-0 flex align-items-center gap-2">
+							<i className="pi pi-shield text-blue-600"></i>
+							Gestión de Roles
+						</h5>
+						<p className="text-sm text-blue-600 m-0 mt-1">Administra los roles y permisos del sistema</p>
+					</div>
+				</div>
 				<div className="w-full max-w-2xl flex flex-column gap-4">
-					<div className="flex align-items-center justify-content-between mb-2">
-						<h2 className="text-2xl font-bold text-primary m-0">Roles</h2>
+					<div className="flex align-items-center justify-content-end mb-2">
 						<span className="flex gap-2">
 							<InputText value={nuevoRol} onChange={e => setNuevoRol(e.target.value)} placeholder="Nuevo rol..." />
 							<Button icon="pi pi-plus" onClick={handleAddRol} disabled={!nuevoRol.trim()} />
 						</span>
 					</div>
 					<div className="flex flex-column gap-4">
-						{roles.length === 0 && (
+						{loading && (
+							<div className="text-center py-6">
+								<i className="pi pi-spin pi-spinner text-5xl text-primary mb-3"></i>
+								<p className="text-gray-500">Cargando roles...</p>
+							</div>
+						)}
+						{(!loading && roles.length === 0) && (
 							<div className="text-center text-gray-500 py-6">
 								<i className="pi pi-users text-5xl mb-3"></i>
 								<p>No hay roles registrados.</p>
 							</div>
 						)}
-						{roles.map((role) => (
+						{(!loading && roles.length > 0) && roles.map((role) => (
 							<div
 								key={role.id}
 								className="border-round-lg shadow-1 border-1 surface-border bg-white"
@@ -404,7 +307,7 @@ export default function RolesPage() {
 									<div className="flex align-items-center gap-2">
 										<Tag
 											value={role.nombre}
-											severity={role.color === "primary" ? "info" : role.color}
+											severity="info"
 											className="text-base px-3 py-1"
 										/>
 									</div>
@@ -415,7 +318,7 @@ export default function RolesPage() {
 											text
 											size="small"
 											severity="danger"
-											onClick={e => { e.stopPropagation(); handleDelete(role); }}
+											onClick={e => { e.stopPropagation(); handleDelete(e, role); }}
 										/>
 										<Button
 											icon={expanded[role.id] ? "pi pi-chevron-up" : "pi pi-chevron-down"}
@@ -428,7 +331,15 @@ export default function RolesPage() {
 									</div>
 								</div>
 								{expanded[role.id] && (
-									<div className="p-4 border-top-1 surface-border animate__animated animate__fadeIn">
+									<div className="p-4 border-top-1 surface-border animate__animated animate__fadeIn relative">
+										{savingRoleId === role.id && (
+											<div className="absolute top-0 left-0 w-full h-full bg-white bg-opacity-80 flex align-items-center justify-content-center z-5">
+												<div className="flex align-items-center gap-2">
+													<i className="pi pi-spin pi-spinner text-primary"></i>
+													<span className="text-primary font-medium">Guardando permisos...</span>
+												</div>
+											</div>
+										)}
 										<PermisosTreeTable
 											permisosTree={permisosTree}
 											selectedKeys={permisosSeleccionados[role.id] || {}}
@@ -437,7 +348,8 @@ export default function RolesPage() {
 									</div>
 								)}
 							</div>
-						))}
+							))
+						}
 					</div>
 				</div>
 			</div>

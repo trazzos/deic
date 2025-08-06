@@ -12,6 +12,8 @@ import { ProgressSpinner } from 'primereact/progressspinner';
 import { Avatar } from 'primereact/avatar';
 import { Tag } from 'primereact/tag';
 import { DataScroller } from 'primereact/datascroller';
+import { BreadCrumb } from "primereact/breadcrumb";
+import { MenuItem } from "primereact/menuitem";
 
 import { 
     DepartamentoService, 
@@ -1274,8 +1276,46 @@ const ProyectoPage = () => {
         );
     };
 
+    // Breadcrumb items
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Proyectos y actividades', icon: 'pi pi-briefcase' },
+        { label: 'Proyectos', icon: 'pi pi-briefcase' }
+    ];
+    const breadcrumbHome: MenuItem = { icon: 'pi pi-home', command: () => window.location.href = '/' };
+
     return (
         <div className="grid">
+          <div className="col-12">
+            <div className="mb-4 p-4 border-round-lg bg-gradient-to-r from-purple-50 to-violet-50 border-1 border-purple-100 shadow-2">
+              <style>{`
+                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+                  color: #6b21a8 !important;
+                  text-decoration: none;
+                }
+                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+                  color: #7c3aed !important;
+                }
+                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-separator {
+                  color: #64748b !important;
+                }
+                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+                  color: #8b5cf6 !important;
+                }
+              `}</style>
+              <BreadCrumb 
+                model={breadcrumbItems} 
+                home={breadcrumbHome}
+                className="custom-breadcrumb-proyectos bg-transparent border-none p-0"
+              />
+              <div className="mt-3">
+                <h5 className="font-bold text-purple-800 m-0 flex align-items-center gap-2">
+                  <i className="pi pi-briefcase text-purple-600"></i>
+                  Gestión de Proyectos
+                </h5>
+                <p className="text-sm text-purple-600 m-0 mt-1">Administra y supervisa todos los proyectos activos</p>
+              </div>
+            </div>
+          </div>
           {proyectos.length === 0 && !loading ? (
             <EmptyStateProject onAddProject={onAgregar} />
           ) : (

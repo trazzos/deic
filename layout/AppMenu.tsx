@@ -15,24 +15,24 @@ const AppMenu = () => {
             label: 'Home',
             items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }]
         },
-
         {
-            label: 'Configuración',
-            icon: 'pi pi-fw pi-cogs',
+            label: 'Catálogos',
+            icon: 'pi pi-fw pi-th-large',
+            items: [
+                { label: 'Autoridades', icon: 'pi pi-fw pi-th-large', to: '/catalogos/autoridad' },
+                { label: 'Beneficiarios', icon: 'pi pi-fw pi-th-large', to: '/catalogos/beneficiario'},
+                { label: 'Capacitadores', icon: 'pi pi-fw pi-th-large', to: '/catalogos/capacitador'},
+                { label: 'Departamentos', icon: 'pi pi-fw pi-th-large', to: '/catalogos/departamento'},
+                { label: 'Tipos de actividad', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-actividad'},
+                { label: 'Tipos de documento', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-documento'},
+                { label: 'Tipos de proyecto', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-proyecto'},
+            ],
+
+        },
+        {
+            label: 'Gestión de cuentas',
+            icon: 'pi pi-fw pi-users',
             items:[
-                {
-                    label:'Catalogos',
-                    icon: 'pi pi-th-large',
-                    items: [
-                            { label: 'Autoridades', icon: 'pi pi-fw pi-th-large', to: '/catalogos/autoridad' },
-                            { label: 'Beneficiarios', icon: 'pi pi-fw pi-th-large', to: '/catalogos/beneficiario'},
-                            { label: 'Capacitadores', icon: 'pi pi-fw pi-th-large', to: '/catalogos/capacitador'},
-                            { label: 'Departamentos', icon: 'pi pi-fw pi-th-large', to: '/catalogos/departamento'},
-                            { label: 'Tipos de actividad', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-actividad'},
-                            { label: 'Tipos de documento', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-documento'},
-                            { label: 'Tipos de proyecto', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-proyecto'},
-                    ],
-                },
                 { label: 'Roles de usuario', icon: 'pi pi-fw pi-key', to: '/roles' },
                 { label: 'Personas', icon: 'pi pi-fw pi-users', to: '/personas'},
             ]
