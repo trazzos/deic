@@ -11,10 +11,14 @@ import { BreadCrumb } from "primereact/breadcrumb";
 import { MenuItem } from "primereact/menuitem";
 
 import type { PermisoNode, Role } from '@/types/role';
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { usePermissions } from '@/src/hooks/usePermissions';
 
 // Los permisos ahora se cargan desde el servidor
 import { useNotification } from '@/layout/context/notificationContext';
 import { RoleService } from '@/src/services/catalogos/role';
+import { Tree } from "primereact/tree";
+import AccessDenied from "@/src/components/AccessDenied";
 
 // Utilidad para convertir PermisoNode[] a TreeNode[] para TreeTable
 function permisoNodesToTreeNodes(nodes: PermisoNode[]): TreeNode[] {
@@ -41,29 +45,104 @@ function PermisosTreeTable({
 }) {
 	const treeNodes = permisoNodesToTreeNodes(permisosTree);
 
-	// Convertir selectedKeys al formato esperado por TreeTable con propagación
-	const treeTableSelectedKeys = React.useMemo(() => {
-		const converted: { [key: string]: { checked: boolean } } = {};
-		Object.keys(selectedKeys).forEach(key => {
-			if (selectedKeys[key]) {
-				converted[key] = { checked: true };
+	
+	const calculateNodeStates = useCallback((nodes: TreeNode[], selectedKeys: { [key: string]: boolean }): { [key: string]: any } => {
+		const result: { [key: string]: any } = {};
+		
+		const processNode = (node: TreeNode): { checked: boolean; partialChecked: boolean } => {
+			const hasChildren = node.children && node.children.length > 0;
+			
+			if (!hasChildren) {
+				
+				const isChecked = node.key ? selectedKeys[node.key] === true : false;
+				if (isChecked && node.key) {
+					result[node.key] = { checked: true };
+				}
+				return { checked: isChecked, partialChecked: false };
+			} else {
+				
+				const childrenStates = node.children!.map(child => processNode(child));
+				
+				const allChecked = childrenStates.every(state => state.checked);
+				const someChecked = childrenStates.some(state => state.checked || state.partialChecked);
+				const noneChecked = !someChecked;
+				
+				if (allChecked) {
+				
+					if (node.key) {
+						result[node.key] = { checked: true };
+					}
+					return { checked: true, partialChecked: false };
+				} else if (someChecked) {
+				
+					if (node.key) {
+						result[node.key] = { checked: false, partialChecked: true };
+					}
+					return { checked: false, partialChecked: true };
+				} else {
+					
+					return { checked: false, partialChecked: false };
+				}
 			}
-		});
-		return converted;
-	}, [selectedKeys]);
+		};
+		
+		nodes.forEach(node => processNode(node));
+		return result;
+	}, []);
+
+	const treeTableSelectedKeys = React.useMemo(() => {
+		return calculateNodeStates(treeNodes, selectedKeys);
+	}, [selectedKeys, treeNodes, calculateNodeStates]);
 
 	const handleSelectionChange = (e: any) => {
 		const raw = e.value || {};
 		const clean: { [key: string]: boolean } = {};
 		
-		// Procesamos las selecciones del TreeTable
-		Object.keys(raw).forEach(k => {
-			const value = raw[k];
-			if (value === true || (typeof value === 'object' && value.checked === true)) {
-				clean[k] = true;
-			}
-		});
+	
+		const extractLeafSelections = (nodes: TreeNode[]) => {
+			nodes.forEach(node => {
+				if (!node.key) return; 
+				const value = raw[node.key];
+				const isSelected = value === true || (typeof value === 'object' && value.checked === true);
+				
+				if (node.children && node.children.length > 0) {
+					
+					extractLeafSelections(node.children);
+					
+					const hasSelectedChildren = node.children.some(child => {
+						return child.key && (clean[child.key] || 
+							(child.children && child.children.some(grandChild => 
+								grandChild.key && clean[grandChild.key]
+							))
+						);
+					});
 		
+					if (hasSelectedChildren || isSelected) {
+						clean[node.key] = true;
+					}
+				} else {
+			
+					if (isSelected && node.key) {
+						clean[node.key] = true;
+					}
+				}
+			});
+		};
+		
+
+		const propagateToAncestors = (nodes: TreeNode[], parentKey?: string) => {
+			nodes.forEach((node: any) => {
+				if (node.children && node.children.length > 0) {
+					propagateToAncestors(node.children, node.key);
+				}
+				
+				if (node.key && clean[node.key] && parentKey) {
+					clean[parentKey] = true;
+				}
+			});
+		};
+		
+		extractLeafSelections(treeNodes);
 		onSelectionChange(clean);
 	};
 
@@ -103,6 +182,7 @@ function PermisosTreeTable({
 
 export default function RolesPage() {
 	const { showSuccess, showError } = useNotification();
+	const { canCreate, canUpdate, canDelete, canManage } = usePermissions();
 	const [loading, setLoading] = useState(false);
 	const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
 	const [roles, setRoles] = useState<Role[]>([]);
@@ -198,7 +278,6 @@ export default function RolesPage() {
 		}
 	};
 
-	// Función para guardar permisos sin debounce (la que realmente hace el request)
 	const savePermissions = useCallback(async (roleId: number, keys: { [key: string]: boolean }) => {
 		try {
 			setSavingRoleId(roleId);
@@ -221,7 +300,7 @@ export default function RolesPage() {
 		}
 	}, [roles, showSuccess, showError]);
 
-	// Función con debounce para manejar cambios en permisos
+
 	const handlePermTreeChange = useCallback((roleId: number, keys: { [key: string]: boolean }) => {
 		// Actualizar inmediatamente el estado local para que la UI responda
 		setPermisosSeleccionados(prev => ({ ...prev, [roleId]: keys }));
@@ -237,7 +316,7 @@ export default function RolesPage() {
 		}, 1000);
 	}, [savePermissions]);
 
-	// Breadcrumb items
+
 	const breadcrumbItems: MenuItem[] = [
 		{ label: 'Gestión de cuentas', icon: 'pi pi-users' },
 		{ label: 'Roles de usuario', icon: 'pi pi-shield' }
@@ -277,12 +356,14 @@ export default function RolesPage() {
 					</div>
 				</div>
 				<div className="w-full max-w-2xl flex flex-column gap-4">
-					<div className="flex align-items-center justify-content-end mb-2">
-						<span className="flex gap-2">
-							<InputText value={nuevoRol} onChange={e => setNuevoRol(e.target.value)} placeholder="Nuevo rol..." />
-							<Button icon="pi pi-plus" onClick={handleAddRol} disabled={!nuevoRol.trim()} />
-						</span>
-					</div>
+					<PermissionGuard resource="gestion_cuentas.roles" action="agregar">
+						<div className="flex align-items-center justify-content-end mb-2">
+							<span className="flex gap-2">
+								<InputText value={nuevoRol} onChange={e => setNuevoRol(e.target.value)} placeholder="Nuevo rol..." />
+								<Button icon="pi pi-plus" onClick={handleAddRol} disabled={!nuevoRol.trim()} />
+							</span>
+						</div>
+					</PermissionGuard>
 					<div className="flex flex-column gap-4">
 						{loading && (
 							<div className="text-center py-6">
@@ -312,14 +393,16 @@ export default function RolesPage() {
 										/>
 									</div>
 									<div className="flex gap-2 align-items-center">
-										<Button
-											icon="pi pi-trash"
-											rounded
-											text
-											size="small"
-											severity="danger"
-											onClick={e => { e.stopPropagation(); handleDelete(e, role); }}
-										/>
+										<PermissionGuard resource="gestion_cuentas.roles" action="eliminar">
+											<Button
+												icon="pi pi-trash"
+												rounded
+												text
+												size="small"
+												severity="danger"
+												onClick={e => { e.stopPropagation(); handleDelete(e, role); }}
+											/>
+										</PermissionGuard>
 										<Button
 											icon={expanded[role.id] ? "pi pi-chevron-up" : "pi pi-chevron-down"}
 											rounded
@@ -340,11 +423,19 @@ export default function RolesPage() {
 												</div>
 											</div>
 										)}
-										<PermisosTreeTable
-											permisosTree={permisosTree}
-											selectedKeys={permisosSeleccionados[role.id] || {}}
-											onSelectionChange={keys => handlePermTreeChange(role.id, keys)}
-										/>
+										<PermissionGuard 
+											resource="gestion_cuentas.roles" 
+											action="editar"
+											fallback={
+												<AccessDenied message="No tienes permisos para editar los permisos de este rol" />
+											}
+										>
+											<PermisosTreeTable
+												permisosTree={permisosTree}
+												selectedKeys={permisosSeleccionados[role.id] || {}}
+												onSelectionChange={keys => handlePermTreeChange(role.id, keys)}
+											/>
+										</PermissionGuard>
 									</div>
 								)}
 							</div>

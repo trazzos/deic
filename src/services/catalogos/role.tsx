@@ -6,6 +6,10 @@ export const RoleService = {
         return http.get(`/api/roles`);
     },
 
+    getListRolesSinPermiso() {
+        return http.get(`/api/roles/sin-permisos`);
+    },
+
     getListPermisos() {
         return http.get(`/api/permisos`);
     },

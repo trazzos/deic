@@ -16,27 +16,38 @@ import { BreadCrumb } from "primereact/breadcrumb";
 import { MenuItem } from "primereact/menuitem";
 import { Dialog } from "primereact/dialog";
 import { Password } from "primereact/password";
+import { Tag } from "primereact/tag";
+import { MultiSelect } from "primereact/multiselect";
 
 import { useNotification } from '@/layout/context/notificationContext';
-
-import { DepartamentoService, PersonaService } from "@/src/services";
-import { Tag } from "primereact/tag";
+import { DepartamentoService, PersonaService, RoleService } from "@/src/services";
+import PermissionGuard from "@/src/components/PermissionGuard";
+import AccessDenied from "@/src/components/AccessDenied";
+import { useFormErrorHandler } from '@/src/utils/errorUtils';
 
 
 interface Persona {
-    id: number | null;
+    id: number;
     departamento_id: number | null;
     nombre: string;
     apellido_paterno: string;
     apellido_materno: string
     responsable_departamento:string;
     email: string | null;
+    cuenta_activa?: boolean;     
     password: string | null;
     password_confirmation: string | null;
-    
 }
-const formularioSchema = Yup.object().shape({
 
+interface Usuario {
+    email: string | null;     
+    password: string | null;
+    roles: string[] | null;
+    password_confirmation: string | null;
+
+}
+
+const formularioSchema = Yup.object().shape({
     departamento_id: Yup.number().required('El departamento es obligatorio'),
     nombre: Yup.string().required('El nombre es obligatorio'),
     apellido_paterno: Yup.string().required('El apellido paterno es obligatorio'),
@@ -44,26 +55,41 @@ const formularioSchema = Yup.object().shape({
     responsable_departamento: Yup.string().required('El ¿Es responsable de departamento? es obligatorio'),
     email: Yup.string()
         .nullable()
-        .when([], {
-            is: (val: string | null) => !!val,
-            then: (schema) => schema.email('El email debe ser un email válido'),
-            otherwise: (schema) => schema.notRequired(),
+        .when('$isExistingPersona', {
+            is: true, // Si es una persona existente
+            then: (schema) => schema.notRequired(),
+            otherwise: (schema) => schema
+                .when([], {
+                    is: (val: string | null) => !!val,
+                    then: (schema) => schema.email('El email debe ser un email válido'),
+                    otherwise: (schema) => schema.notRequired(),
+                }),
         }),
     password: Yup.string()
-        .when('email', {
-            is: (val: string | null) => !!val,
-            then: (schema) => schema
-                .min(8, 'La contraseña debe tener al menos 8 caracteres')
-                .required('La contraseña es obligatoria'),
-            otherwise: (schema) => schema.notRequired(),
+        .when('$isExistingPersona', {
+            is: true, // Si es una persona existente
+            then: (schema) => schema.notRequired(),
+            otherwise: (schema) => schema
+                .when('email', {
+                    is: (val: string | null) => !!val,
+                    then: (schema) => schema
+                        .min(8, 'La contraseña debe tener al menos 8 caracteres')
+                        .required('La contraseña es obligatoria'),
+                    otherwise: (schema) => schema.notRequired(),
+                }),
         }),
     password_confirmation: Yup.string()
-        .when('email', {
-            is: (val: string | null) => !!val,
-            then: (schema) => schema
-                .oneOf([Yup.ref('password'), undefined], 'Las contraseñas deben coincidir')
-                .required('La confirmación de contraseña es obligatoria'),
-            otherwise: (schema) => schema.notRequired(),
+        .when('$isExistingPersona', {
+            is: true, // Si es una persona existente
+            then: (schema) => schema.notRequired(),
+            otherwise: (schema) => schema
+                .when('email', {
+                    is: (val: string | null) => !!val,
+                    then: (schema) => schema
+                        .oneOf([Yup.ref('password'), undefined], 'Las contraseñas deben coincidir')
+                        .required('La confirmación de contraseña es obligatoria'),
+                    otherwise: (schema) => schema.notRequired(),
+                }),
         }),
 });
 
@@ -71,22 +97,37 @@ const usuarioSchema = Yup.object().shape({
     email: Yup.string()
         .email('El email debe ser un email válido')
         .required('El email es obligatorio'),
+    roles: Yup.array().of(Yup.string()).required('Seleccione al menos un rol'),    
     password: Yup.string()
-        .min(8, 'La contraseña debe tener al menos 8 caracteres')
-        .required('La contraseña es obligatoria'),
+        .when('$isExistingUser', {
+            is: false, // Si es un usuario nuevo
+            then: (schema) => schema
+                .min(8, 'La contraseña debe tener al menos 8 caracteres')
+                .required('La contraseña es obligatoria'),
+            otherwise: (schema) => schema
+                .min(8, 'La contraseña debe tener al menos 8 caracteres')
+                .notRequired(), // Para usuarios existentes, la contraseña es opcional
+        }),
     password_confirmation: Yup.string()
-        .oneOf([Yup.ref('password'), undefined], 'Las contraseñas deben coincidir')
-        .required('La confirmación de contraseña es obligatoria'),
+        .when('password', {
+            is: (val: string) => !!val && val.length > 0,
+            then: (schema) => schema
+                .oneOf([Yup.ref('password'), undefined], 'Las contraseñas deben coincidir')
+                .required('La confirmación de contraseña es obligatoria'),
+            otherwise: (schema) => schema.notRequired(),
+        }),
 });
 
 const PersonasPage = () => {
 
     const [departamentos, setDepartamentos] = useState<any[]>([]);
+    const [roles, setRoles] = useState<any[]>([]);
     const [personas, setPersonas] = useState<Persona[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingGuardar, setLoadingGuardar] = useState(false);
     const [visibleFormulario, setVisibleFormulario] = useState(false);
     const [deletingRows, setDeletingRows] = useState<{ [key: string]: boolean }>({});
+     const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
     const [formularioPersona, setFormularioPersona] = useState<any>({
         id: null,
         departamento_id:null,
@@ -111,16 +152,24 @@ const PersonasPage = () => {
     const [visibleUsuarioDialog, setVisibleUsuarioDialog] = useState(false);
     const [selectedPersonaForUser, setSelectedPersonaForUser] = useState<Persona | null>(null);
     const [loadingUsuario, setLoadingUsuario] = useState(false);
-    const [usuarioData, setUsuarioData] = useState({
+    const [usuarioData, setUsuarioData] = useState<Usuario>({
         email: '',
+        roles:null,
         password: '',
         password_confirmation: '',
-        activo: true
     });
     const [usuarioErrors, setUsuarioErrors] = useState<{ [key: string]: string }>({});
 
     useEffect(() => {
         setLoading(true);
+        RoleService.getListRolesSinPermiso()
+            .then((response:any) => {
+                const roles = response.data;
+                setRoles(roles);
+            })
+            .catch((error:any) => {
+                showError(error.message || 'Ha ocurrido un error al obtener la lista de roles');
+            });
         DepartamentoService.getListDepartamento()
             .then((response:any) => {
                 const departamentos = response.data.map((item:any) => ({
@@ -155,20 +204,26 @@ const PersonasPage = () => {
         }));
     };
     
-    const handleSaveData = async () => {
+    // Hook personalizado para manejar errores de formulario principal
+    const handleFormErrors = useFormErrorHandler(setFormularioErrors, showError);
 
+    const handleSaveData = async () => {
         setLoadingGuardar(true);
 
         try {
-
-            await formularioSchema.validate(formularioPersona, { abortEarly: false });
+            const isExistingPersona = !!selectedPersona?.id;
+            await formularioSchema.validate(formularioPersona, { 
+                abortEarly: false,
+                context: { isExistingPersona }
+            });
             setFormularioErrors({});
 
-            const contexto =  {
+            const contexto = {
                 ...formularioPersona,
                 responsable_departamento: formularioPersona.responsable_departamento ? 'Si' : 'No'
             }
-            const response:any = formularioPersona.id
+            
+            const response: any = formularioPersona.id
                 ? await PersonaService.updatePersona(formularioPersona.id, contexto)
                 : await PersonaService.createPersona(contexto);
 
@@ -179,7 +234,7 @@ const PersonasPage = () => {
             setVisibleFormulario(false);
 
         } catch (err: any) {
-
+            
             if (err.inner) {
                 const errors: { [key: string]: string } = {};
                 err.inner.forEach((validationError: any) => {
@@ -188,8 +243,10 @@ const PersonasPage = () => {
                     }
                 });
                 setFormularioErrors(errors);
-            } else 
-                showError('Ha ocurrido un error, intente nuevamente');
+            } else {
+              
+                handleFormErrors(err);
+            }
         } finally {
             setLoadingGuardar(false);
         };
@@ -197,8 +254,9 @@ const PersonasPage = () => {
 
     const handleEditPersona = (e:any) => {
 
-         setFormularioErrors({});
+        setFormularioErrors({});
         const data = e.data;
+        setSelectedPersona(data);
         setFormularioPersona((_prev:any) => ({
            ...data,
            responsable_departamento: data.responsable_departamento === 'Si',
@@ -304,10 +362,6 @@ const PersonasPage = () => {
         </div>
     );
 
-    const renderHeader = () => {
-        return null; // Ya no necesitamos header en la tabla
-    };
-
     const renderToolbar = () => {
         return (
             <div className="mb-4 p-3 bg-white border-round-lg shadow-1 border-1 surface-border">
@@ -397,13 +451,16 @@ const PersonasPage = () => {
     const bodyEsResponsable = (rowData:Persona) => {  
         return (
             <span>
-                <Tag style={{ fontSize: '1rem' }} severity={rowData.responsable_departamento ? 'success' : 'danger'}>{rowData.responsable_departamento ? 'Sí' : 'No'}</Tag>
+                <Tag style={{ fontSize: '1rem' }} severity={rowData.responsable_departamento === 'Si' ? 'success' : 'danger'}>{rowData.responsable_departamento}</Tag>
             </span>
         );
     }
 
+    // Hook personalizado para manejar errores de usuario
+    const handleUsuarioErrors = useFormErrorHandler(setUsuarioErrors, showError);
+
     const bodyCuentaUsuario = (rowData: Persona) => {
-        const tieneCuenta = !!rowData.email;
+        const tieneCuenta = !!rowData?.email && rowData.cuenta_activa;
         return (
             <Tag
                 value={tieneCuenta ? 'Sí' : 'No'}
@@ -414,13 +471,27 @@ const PersonasPage = () => {
         );
     };
 
-    const handleConfigurarUsuario = (rowData: Persona) => {
-        setSelectedPersonaForUser(rowData);
+    const handleConfigurarUsuario = async (rowData: Persona) => {
+        const row = { ...rowData };
+        let usuario = null;
+
+        if (rowData.id && rowData.email) {
+
+            try {
+                const response = await PersonaService.infoCuentaPersona(rowData.id);
+                usuario = await response.data;
+                row.cuenta_activa = usuario?.active ?? false;
+            } catch (error) {
+                console.warn('Error al cargar datos del usuario:', error);
+            }
+
+        }
+        setSelectedPersonaForUser(row);
         setUsuarioData({
-            email: rowData.email || '',
-            password: '',
-            password_confirmation: '',
-            activo: true
+            email: usuario?.email || rowData.email || '',
+            password: null,
+            roles: usuario ? usuario.roles : [],
+            password_confirmation: null,
         });
         setUsuarioErrors({});
         setVisibleUsuarioDialog(true);
@@ -440,63 +511,82 @@ const PersonasPage = () => {
 
         setLoadingUsuario(true);
         try {
-            await usuarioSchema.validate(usuarioData, { abortEarly: false });
+            // Determinar si es un usuario existente
+            const isExistingUser = !!selectedPersonaForUser.email;
+            
+            // Validar con el contexto apropiado
+            await usuarioSchema.validate(usuarioData, { 
+                abortEarly: false,
+                context: { isExistingUser }
+            });
+            
             setUsuarioErrors({});
 
-            // Aquí harías la llamada al API para crear/actualizar el usuario
-            // await PersonaService.createOrUpdateUser(selectedPersonaForUser.id, usuarioData);
+            // Preparar los datos para enviar
+            const dataToSend = {
+                email: usuarioData.email,
+                roles: usuarioData.roles,
+                ...(usuarioData.password && { password: usuarioData.password }),
+                ...(usuarioData.password_confirmation && { password_confirmation: usuarioData.password_confirmation })
+            };
+
+            await PersonaService.actualizarCuenta(selectedPersonaForUser.id, dataToSend);
             
-            // Simular actualización
+            // Actualizar la persona en la tabla
             const updatedPersona = { 
                 ...selectedPersonaForUser, 
-                email: usuarioData.email 
+                email: usuarioData.email,
+                cuenta_activa: true
             };
             updateRows(updatedPersona);
             
-            showSuccess('Usuario configurado correctamente');
+            showSuccess(`Usuario ${isExistingUser ? 'actualizado' : 'creado'} correctamente`);
             setVisibleUsuarioDialog(false);
         } catch (err: any) {
-            if (err.inner) {
+
+               if (err.inner) {
                 const errors: { [key: string]: string } = {};
                 err.inner.forEach((validationError: any) => {
                     if (validationError.path) {
                         errors[validationError.path] = validationError.message;
-                    }
-                });
-                setUsuarioErrors(errors);
-            } else {
-                showError('Ha ocurrido un error, intente nuevamente');
-            }
+                        }
+                    });
+                    setFormularioErrors(errors);
+                } else {
+                    handleUsuarioErrors(err);
+                }
+
         } finally {
             setLoadingUsuario(false);
         }
     };
 
-    const handleDeleteUsuario = async () => {
+    const handleDisableUsuario = async () => {
         if (!selectedPersonaForUser) return;
 
         confirmPopup({
             target: document.activeElement as HTMLElement,
-            message: '¿Está seguro de eliminar el acceso de usuario? Esta acción no se puede deshacer.',
+            message: '¿Está seguro de inhabilitar el acceso de usuario?',
             icon: 'pi pi-exclamation-triangle',
-            acceptLabel: 'Sí, eliminar',
+            acceptLabel: 'Sí, inhabilitar',
             rejectLabel: 'Cancelar',
             accept: async () => {
                 try {
                     setLoadingUsuario(true);
-                    // await PersonaService.deleteUser(selectedPersonaForUser.id);
-                    
+                    await PersonaService.disableCuenta(selectedPersonaForUser.id);
+
                     // Simular eliminación
                     const updatedPersona = { 
                         ...selectedPersonaForUser, 
-                        email: null 
+                        cuenta_activa: selectedPersonaForUser.cuenta_activa ? false : true, 
                     };
+                    setSelectedPersonaForUser(updatedPersona);
                     updateRows(updatedPersona);
-                    
-                    showSuccess('Acceso de usuario eliminado correctamente');
-                    setVisibleUsuarioDialog(false);
+
+                    showSuccess('Acceso de usuario inhabilitado correctamente');
+                    //setVisibleUsuarioDialog(false);
                 } catch (error: any) {
-                    showError(error.message || 'Error al eliminar el acceso de usuario');
+                    showError(error.message || 'Error al inhabilitar el acceso de usuario');
                 } finally {
                     setLoadingUsuario(false);
                 }
@@ -541,7 +631,14 @@ const PersonasPage = () => {
     };
 
     return (
-        <div className="grid">
+        <PermissionGuard
+            resource='gestion_cuentas'
+            action='personas'
+            fallback={<AccessDenied
+                 message="No tienes permiso para acceder a esta sección."
+                />}
+            >
+            <div className="grid">
             <div className="col-12">
                 <div className="mb-3 p-4 border-round-lg bg-gradient-to-r from-green-50 to-emerald-50 border-1 border-green-100 shadow-2">
                     <style>{`
@@ -787,13 +884,33 @@ const PersonasPage = () => {
                             <InputText
                                 id="email"
                                 name="email"
-                                value={usuarioData.email}
+                                value={usuarioData.email ?? ''}
                                 onChange={handleUsuarioChange}
                                 placeholder="usuario@ejemplo.com"
                                 className={usuarioErrors.email ? 'p-invalid' : ''}
                             />
                             {usuarioErrors.email && (
                                 <small className="text-red-500">{usuarioErrors.email}</small>
+                            )}
+                        </div>
+                        <div className="flex flex-column gap-2">
+                            <label htmlFor="roles" className="font-medium text-900">
+                                Roles de acceso <span className="text-red-500">*</span>
+                            </label>
+                            <MultiSelect
+                                id="roles"
+                                showClear
+                                name="roles"
+                                value={usuarioData.roles}
+                                options={roles}
+                                onChange={handleUsuarioChange}
+                                optionLabel="texto"
+                                optionValue="clave"
+                                placeholder="Seleccione una opción"
+                                className={usuarioErrors.roles ? 'p-invalid' : ''}
+                            />
+                            {usuarioErrors.roles && (
+                                <small className="text-red-500">{usuarioErrors.roles}</small>
                             )}
                         </div>
 
@@ -805,7 +922,7 @@ const PersonasPage = () => {
                             <Password
                                 id="password"
                                 name="password"
-                                value={usuarioData.password}
+                                value={usuarioData.password ?? ''}
                                 onChange={handleUsuarioChange}
                                 placeholder="Mínimo 8 caracteres"
                                 toggleMask
@@ -824,7 +941,7 @@ const PersonasPage = () => {
                             <Password
                                 id="password_confirmation"
                                 name="password_confirmation"
-                                value={usuarioData.password_confirmation}
+                                value={usuarioData.password_confirmation ?? ''}
                                 onChange={handleUsuarioChange}
                                 placeholder="Repetir contraseña"
                                 toggleMask
@@ -835,50 +952,41 @@ const PersonasPage = () => {
                                 <small className="text-red-500">{usuarioErrors.password_confirmation}</small>
                             )}
                         </div>
-
-                        <div className="flex align-items-center gap-2 mt-2">
-                            <InputSwitch
-                                id="activo"
-                                name="activo"
-                                checked={usuarioData.activo}
-                                onChange={handleUsuarioChange}
-                            />
-                            <label htmlFor="activo" className="font-medium text-900">
-                                Usuario activo
-                            </label>
-                        </div>
+                        {selectedPersonaForUser?.email && (
+                            <Button
+                                label= { selectedPersonaForUser?.cuenta_activa ? "Inhabilitar Acceso" : "Habilitar Acceso" }
+                                icon={ selectedPersonaForUser?.cuenta_activa ? "pi pi-lock" : "pi pi-lock-open" }
+                                severity={ selectedPersonaForUser?.cuenta_activa ? 'success' : 'danger' }
+                                outlined
+                                onClick={handleDisableUsuario}
+                                disabled={loadingUsuario}
+                                />
+                            )}
                     </div>
 
                     <div className="flex justify-content-between align-items-center mt-6 pt-4 border-top-1 surface-border">
-                        {selectedPersonaForUser?.email && (
-                            <Button
-                                label="Eliminar Acceso"
-                                icon="pi pi-trash"
-                                severity="danger"
-                                outlined
-                                onClick={handleDeleteUsuario}
-                                disabled={loadingUsuario}
-                            />
-                        )}
-                        <div className="flex gap-2 ml-auto">
-                            <Button
-                                label="Cancelar"
-                                icon="pi pi-times"
-                                outlined
-                                onClick={() => setVisibleUsuarioDialog(false)}
-                                disabled={loadingUsuario}
-                            />
-                            <Button
-                                label={selectedPersonaForUser?.email ? 'Actualizar' : 'Crear Usuario'}
-                                icon="pi pi-save"
-                                loading={loadingUsuario}
-                                onClick={handleSaveUsuario}
-                            />
-                        </div>
+                        { (selectedPersonaForUser?.cuenta_activa || selectedPersonaForUser?.email === null) && (
+                            <div className="flex gap-2 ml-auto">
+                                <Button
+                                    label="Cancelar"
+                                    icon="pi pi-times"
+                                    outlined
+                                    onClick={() => setVisibleUsuarioDialog(false)}
+                                    disabled={loadingUsuario}
+                                />
+                                <Button
+                                    label={selectedPersonaForUser?.email ? 'Actualizar' : 'Crear Usuario'}
+                                    icon="pi pi-save"
+                                    loading={loadingUsuario}
+                                    onClick={handleSaveUsuario}
+                                />
+                        </div>)}
                     </div>
                 </Dialog>
             </div>
         </div>
+        </PermissionGuard>
+        
     );
 }
 

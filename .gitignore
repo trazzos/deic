@@ -38,3 +38,8 @@ next-env.d.ts
 certificates
 # Local Netlify folder
 .netlify
+INTEGRATION_EXAMPLE.tsx
+SECURITY_IMPLEMENTATION_SUMMARY.md
+PERMISSIONS.md
+# Local Vercel folder
+.vercel
