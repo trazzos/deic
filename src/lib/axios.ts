@@ -23,21 +23,27 @@ http.interceptors.request.use(
 http.interceptors.response.use(
     (response) => response.data,
     (error) => {
-        // Ejemplo: manejo global de errores 401
-        if (error.response && error.response.status === 401) {
-            // Puedes redirigir al login o limpiar sesión aquí
-            //limpia sesion aqui usando cookies o destruir la sesión del usuario
-
-            // Por ejemplo, si estás usando cookies:
-            // await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {}, { withCredentials: true });
-
-            if (window.location.pathname !== '/auth/login') {
-                console.error('Unauthorized access - redirecting to login');
+        // Manejo global de errores de autenticación
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            console.warn('🔒 Error de autenticación detectado:', error.response.status);
+            
+            // Guardar la ruta actual para redirección posterior si no estamos ya en login
+            if (typeof window !== 'undefined' && window.location.pathname !== '/auth/login') {
+                const currentPath = window.location.pathname;
+                if (currentPath !== '/') {
+                    sessionStorage.setItem('redirectAfterLogin', currentPath);
+                }
+                
+                // Limpiar cookies de sesión
                 document.cookie = `${process.env.NEXT_PUBLIC_COOKIE_NAME}_session=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
                 document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
-                window.location.href = '/auth/login';
+                
+                // No redirigir aquí - dejar que SessionGuard maneje la redirección
+                // Esto evita conflictos entre el interceptor y el guard
+                console.log('🔄 SessionGuard se encargará de la redirección...');
             }
         }
+        
         return Promise.reject(error);
     }
 );

@@ -11,14 +11,15 @@ import { BreadCrumb } from "primereact/breadcrumb";
 import { MenuItem } from "primereact/menuitem";
 
 import type { PermisoNode, Role } from '@/types/role';
-import { PermissionGuard } from '@/src/components/PermissionGuard';
-import { usePermissions } from '@/src/hooks/usePermissions';
 
 // Los permisos ahora se cargan desde el servidor
 import { useNotification } from '@/layout/context/notificationContext';
 import { RoleService } from '@/src/services/catalogos/role';
-import { Tree } from "primereact/tree";
+// componentes
+import { PermissionGuard } from '@/src/components/PermissionGuard';
 import AccessDenied from "@/src/components/AccessDenied";
+// hooks
+import { usePermissions } from '@/src/hooks/usePermissions';
 
 // Utilidad para convertir PermisoNode[] a TreeNode[] para TreeTable
 function permisoNodesToTreeNodes(nodes: PermisoNode[]): TreeNode[] {

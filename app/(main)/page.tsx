@@ -6,6 +6,7 @@ import { ProgressBar } from 'primereact/progressbar';
 import { Avatar } from 'primereact/avatar';
 import { Tag } from 'primereact/tag';
 import { Button } from 'primereact/button';
+import { useAuthRefresh } from '@/src/hooks/useAuthRefresh';
 
 // Datos simulados para el dashboard ejecutivo
 const departamentos = [
@@ -54,6 +55,9 @@ const ultimasActividades = [
 ];
 
 export default function DashboardEjecutivo() {
+
+	// Hook para refrescar el token de autenticación
+	//const { refreshAuth } = useAuthRefresh({ interval: 300000, checkOnMount: true, checkOnFocus: true });
 	// Gráfica: Proyectos por departamento
 	const barData = {
 		labels: departamentos.map((d) => d.nombre),

@@ -15,11 +15,11 @@ export const usePermissions = () => {
         hasAnyPermission,
         hasAllPermissions,
         // Helpers específicos para acciones comunes
-        canCreate: (resource: string) => hasPermission(`${resource}.create`),
-        canRead: (resource: string) => hasPermission(`${resource}.read`),
-        canUpdate: (resource: string) => hasPermission(`${resource}.update`),
-        canDelete: (resource: string) => hasPermission(`${resource}.delete`),
-        canManage: (resource: string) => hasPermission(`${resource}.manage`),
+        canCreate: (resource: string) => hasPermission(`${resource}.crear`),
+        canRead: (resource: string) => hasPermission(`${resource}.eliminar`),
+        canUpdate: (resource: string) => hasPermission(`${resource}.editar`),
+        canDelete: (resource: string) => hasPermission(`${resource}.eliminar`),
+        canManage: (resource: string) => hasPermission(`${resource}.acceso`),
         // Helper para verificar múltiples permisos de un recurso
         canAccess: (resource: string, actions: string[]) => {
             const permissionsToCheck = actions.map(action => `${resource}.${action}`);

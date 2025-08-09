@@ -5,26 +5,37 @@ import { useRouter } from 'next/navigation';
 import * as Yup from 'yup';
 
 import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
-import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions, ColumnFilterElementTemplateOptions } from 'primereact/column';
+import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
+import { MenuItem } from 'primereact/menuitem';
 
+// Components
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+import CustomBreadcrumb from '@/src/components/CustomBreadcrumb';
+
+// Services, Hooks, Contexts, Types
 import { useAuth } from '@/layout/context/authContext';
 import { useNotification } from '@/layout/context/notificationContext';
-
-
-import type { Demo } from '@/types';
 import { CapacitadorService } from '@/src/services/catalogos';
+import type { Capacitador } from '@/types';
+import { usePermissions } from '@/src/hooks/usePermissions';
 import { generateUUID } from '@/src/utils'
+
 
 
 const CapacitadorPage = () => {
 
-     const router = useRouter();
+    const { isSuperAdmin, canUpdate, canDelete, canCreate } = usePermissions();
+    const accessCreate = isSuperAdmin || canCreate('catalogos.capacitadores');
+    const accessEdit = isSuperAdmin || canUpdate('catalogos.capacitadores');
+    const accessDelete = isSuperAdmin || canDelete('catalogos.capacitadores');
 
-    const [Capacitadores, setCapacitadores] = useState<Demo.Customer[]>([]);
+
+    const [capacitadores, setCapacitadores] = useState<Capacitador[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
@@ -33,7 +44,6 @@ const CapacitadorPage = () => {
     const [loadingSaveRows, setLoadingSaveRows] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [rowErrors, setRowErrors] = useState<{ [key: string]: string | null }>({});
-    const { isAuthenticated } = useAuth();
     const { showError, showSuccess } = useNotification();
     
 
@@ -46,6 +56,7 @@ const CapacitadorPage = () => {
     const onGlobalFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             const value = e.target.value;
             let _filters = { ...filters };
+
             (_filters['global'] as any).value = value;
     
             setFilters(_filters);
@@ -99,27 +110,30 @@ const CapacitadorPage = () => {
 
     useEffect(() => {
 
-        setLoading(true);
-
-        CapacitadorService.getListCapacitador().then((response) => {
-            const filtrados = response.data.map((capacitador:any) => {
-                return {
-                    ...capacitador,
-                    keyString:generateUUID()
-                }
-            });
-            setCapacitadores(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-    }, []);
-
-    useEffect(() => {
-    
-        if (!loading && !isAuthenticated) {
-            router.replace('/auth/login');
+        const fetchCapacitadores = async () => {
+            try {
+                setLoading(true);
+                const response = await CapacitadorService.getListCapacitador();
+                const filtrados = response.data.map((capacitador:any) => {
+                    return {
+                        ...capacitador,
+                        keyString:generateUUID()
+                    }
+                });
+                setCapacitadores(filtrados);
+                setLoading(false);
+                initFilters();
+            } catch (error:any) {
+               const message = error?.response?.data?.message || error?.message || 'Error al cargar los capacitadores';
+               showError('Error', message);
+               setCapacitadores([]);
+            } finally {
+                setLoading(false);
+            }
         }
-    }, [isAuthenticated, loading]);
+
+        fetchCapacitadores();  
+    }, []);
 
     const initFilters = () => {
 
@@ -296,9 +310,7 @@ const CapacitadorPage = () => {
         setEditBuffer((prev:any) => ({
             ...prev,
             [data.keyString]: {...data}
-        }));
-        console.log(editBuffer);
-        
+        }));  
     };
 
     const onRowEditCancel = (e:any) => {
@@ -371,7 +383,7 @@ const CapacitadorPage = () => {
 
     const rowEditorTemplate = (rowData:any, options:any, customHandlers:any) => {
 
-         const isRowEditing = customHandlers.isEditing;
+        const isRowEditing = customHandlers.isEditing;
         if (isRowEditing) {
             
             return (
@@ -399,73 +411,94 @@ const CapacitadorPage = () => {
     
             return (
                 <div className="flex align-items-center justify-content-center gap-2">
-                    <Button
-                        icon="pi pi-pencil" 
-                        size='small'
-                        onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
-                    />
-                    <Button
-                        icon="pi pi-trash" 
-                        size='small'
-                        severity='danger'
-                        loading={deletingRows[rowData.keyString]}
-                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                    />
+                    { accessEdit && (
+                        <Button
+                            icon="pi pi-pencil" 
+                            size='small'
+                            onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
+                        />
+                    )}
+                    { accessDelete && (
+                        <Button
+                            icon="pi pi-trash" 
+                            size='small'
+                            severity='danger'
+                            loading={deletingRows[rowData.keyString]}
+                            onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
+                        />
+                    )}
                 </div>
             );
         }
     };
 
+    // Breadcrumb items
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Catalogos', icon: 'pi pi-briefcase' },
+        { label: 'Capacitadores', icon: 'pi pi-user-edit' }
+    ];
+
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de Capacitadores</h5>
-                    <DataTable
-                        value={Capacitadores}
-                        paginator
-                        rows={10}
-                        dataKey="keyString"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No customers found."
-                        editMode='row'
-                        editingRows={rowsEditing}
-                        onRowEditInit={onRowEditInit}
-                        onRowEditCancel={onRowEditCancel}
-                        onRowEditChange={e => setRowsEditing(e.data)}
-                        header={header}
-                    >
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            editor={(options) => textEditor(options)}
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            editor={(options) => textAreaEditor(options)}
-                            style={{ maxWidth: '8rem' }}
-                            />                        
-                        <Column 
-                            rowEditor
-                            body={(rowData, options) => rowEditorTemplate(rowData, options, {
-                                onInit:onRowEditInit,
-                                onSave:handleSave,
-                                onCancel:onRowEditCancel,
-                                onDelete:handleDelete,
-                                isEditing: !!rowsEditing[rowData.keyString]
-                            })}
-                            bodyClassName="text-center" 
-                            
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+        <PermissionGuard
+            resource='catalogos.capacitadores'
+            action='acceso'
+            fallback={<AccessDenied variant="detailed" message="No tienes acceso a esta modulo"/>}>
+            <div className="grid">
+                <div className="col-12">
+                    <CustomBreadcrumb
+                        items={breadcrumbItems}
+                        theme="blue"
+                        title="Catálogo de Capacitadores"
+                        description="Administra el catálogo de capacitadores"
+                        icon="pi pi-th-large"
+                    />
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                        <DataTable
+                            value={capacitadores}
+                            paginator
+                            rows={10}
+                            dataKey="keyString"
+                            filters={filters}
+                            filterDisplay="menu"
+                            loading={loading}
+                            emptyMessage="No se encontraron registros."
+                            editMode='row'
+                            editingRows={rowsEditing}
+                            onRowEditInit={onRowEditInit}
+                            onRowEditCancel={onRowEditCancel}
+                            onRowEditChange={e => setRowsEditing(e.data)}
+                            header={header}
+                        >
+                            <Column 
+                                field="nombre" 
+                                header="Nombre" 
+                                editor={(options) => textEditor(options)}
+                                filter 
+                                filterPlaceholder="Busqueda por nombre" 
+                                style={{ maxWidth: '4rem' }} /> 
+                            <Column 
+                                field="descripcion" 
+                                header="Descripción" 
+                                editor={(options) => textAreaEditor(options)}
+                                style={{ maxWidth: '8rem' }}
+                                />                        
+                            <Column 
+                                rowEditor
+                                body={(rowData, options) => rowEditorTemplate(rowData, options, {
+                                    onInit:onRowEditInit,
+                                    onSave:handleSave,
+                                    onCancel:onRowEditCancel,
+                                    onDelete:handleDelete,
+                                    isEditing: !!rowsEditing[rowData.keyString]
+                                })}
+                                bodyClassName="text-center" 
+                                
+                                style={{ maxWidth: '2rem' }} />
+                        </DataTable>
+                    </div>
                 </div>
             </div>
-        </div>
+        </PermissionGuard>
     );
 };
 

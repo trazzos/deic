@@ -7,11 +7,11 @@ import {
     isSuperAdminRole 
 } from '@/src/utils/securityUtils';
 
-
 export interface AuthContextProps {
     user: any;
     isAuthenticated: boolean;
     loading: boolean;
+    initialized: boolean;
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
     checkAuth: () => Promise<void>;
@@ -30,115 +30,203 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [permissions, setPermissions] = useState<string[]>([]);
     const [userRoles, setUserRoles] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
+    const [initialized, setInitialized] = useState(false);
     
     // Verificar si el usuario es superadmin
     const isSuperAdmin = useMemo(() => isSuperAdminRole(userRoles), [userRoles]);
-
-    useEffect(() => {
-        checkAuth();
-    }, []);
-
-        // Cargar permisos desde localStorage al inicializar
-    useEffect(() => {
-        const sessionData = getStoredPermissionsSecurely();
-        if (sessionData) {
-            setPermissions(sessionData.permissions);
-            setUserRoles(sessionData.roles);
-        }
-    }, []);
-
     const isAuthenticated = useMemo(() => !!user, [user]);
 
-    // Funciones de verificación de permisos
-    const hasPermission = (permission: string): boolean => {
-        // Superadmin tiene acceso a todo
-
-        if (isSuperAdmin) return true;
-        
-        return permissions.includes(permission);
-    };
-
-    const hasAnyPermission = (requiredPermissions: string[]): boolean => {
-        // Superadmin tiene acceso a todo
-        if (isSuperAdmin) return true;
-        return requiredPermissions.some(permission => permissions.includes(permission));
-    };
-
-    const hasAllPermissions = (requiredPermissions: string[]): boolean => {
-        // Superadmin tiene acceso a todo
-        if (isSuperAdmin) return true;
-        return requiredPermissions.every(permission => permissions.includes(permission));
-    };    
-    
-    const login = async (email: string, password: string) => {
-        setLoading(true);
-        try {
-           
-            await http.get(`/sanctum/csrf-cookie`);
-            const res:any = await http.post(`/api/auth/login`, {
-                email,
-                password
-            });
-        
-            if(res) {
-                setUser(res.user);
-                
-                // Extraer permisos y roles del usuario
-                const userPermissions = res.user?.permisos || res.permissions || [];
-                const userRolesData = res.user?.roles || res.roles || [];
-
-                // Extraer nombres de roles del array de objetos
-                const roleNames = userRolesData.map((role: any) => 
-                    typeof role === 'string' ? role : role.name || role.role_name || role.nombre
-                );
-               
-                setPermissions(userPermissions);
-                setUserRoles(roleNames);
-                
-                // Almacenar de forma segura
-                storePermissionsSecurely(userPermissions, roleNames);
-            }
-            
-            setLoading(false);       
-        } catch (error) {
-            setLoading(false);
-            throw error;
-        }
-        
-    };
-
-   
-    const logout = async () => {
-
-        setLoading(true);
-        await http.post(`/api/auth/logout`);
+    // Función para limpiar todo el estado
+    const clearAllState = () => {
         setUser(null);
         setPermissions([]);
         setUserRoles([]);
         clearSessionData();
-        setLoading(false);
     };
 
-    
-    const checkAuth = async () => {
+    // Función para establecer datos de usuario con validación
+    const setUserData = (userData: any, userPermissions: string[] = [], userRolesList: string[] = []) => {
+        if (!userData) {
+            clearAllState();
+            return;
+        }
+
+        setUser(userData);
+        setPermissions(userPermissions);
+        setUserRoles(userRolesList);
+        
+        // Solo almacenar si tenemos datos válidos
+        if (userPermissions.length > 0 || userRolesList.length > 0) {
+            storePermissionsSecurely(userPermissions, userRolesList);
+        }
+    };
+
+    // Función para verificar autenticación
+    const checkAuth = async (): Promise<void> => {
+        try {
+            const res = await http.get(`/api/auth/profile`);
+            const responseData = res.data || res;
+            
+            if (!responseData || !responseData.user) {
+                clearAllState();
+                return;
+            }
+
+            const userData = responseData.user;
+            // Extraer permisos y roles del perfil,de esta manera siempre estara actualizada si en el backend cambian
+            // los permisos o roles del usuario
+            const userPermissions = userData.permisos || userData.permissions || responseData.permisos || responseData.permissions || [];
+            const userRolesData = userData.roles || responseData.roles || [];
+
+            // Convertir roles a nombres soporta arrays de strings o objetos
+            const roleNames = userRolesData.map((role: any) => 
+                typeof role === 'string' ? role : role.name || role.role_name || role.nombre
+            ).filter(Boolean);
+
+            // Establecer datos de usuario
+            setUserData(userData, userPermissions, roleNames);
+
+        } catch (error: any) {      
+            // Si es 401/403, limpiar todo y el SessionGuard se encargará de redirigir
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                clearAllState();
+            } else {
+                // Para otros errores, mantener datos de localStorage si existen
+                const storedData = getStoredPermissionsSecurely();
+                if (!storedData || !storedData.permissions || !storedData.roles) {
+                    clearAllState();
+                }
+            }
+        }
+    };
+
+    useEffect(() => {
+        const initializeAuth = async () => {
+            setLoading(true);
+        
+            try {
+                const storedData = getStoredPermissionsSecurely();
+                
+                if (storedData && storedData.permissions && storedData.roles) {
+                    setPermissions(storedData.permissions);
+                    setUserRoles(storedData.roles);
+                }
+                await checkAuth();
+
+            } catch (error) {
+                clearAllState();
+            } finally {
+                setLoading(false);
+                setInitialized(true);
+            }
+        };
+
+        if (!initialized) {
+            initializeAuth();
+        }
+    }, [initialized]);
+
+    // Función de login mejorada
+    const login = async (email: string, password: string): Promise<void> => {
         setLoading(true);
         try {
+    
+            await http.get(`/sanctum/csrf-cookie`);
+            const res: any = await http.post(`/api/auth/login`, {
+                email,
+                password
+            });
+        
+            if (!res || !res.user) {
+                throw new Error('Respuesta de login inválida');
+            }
 
-            const res = await http.get(`/api/auth/profile`);
-            setUser(res);
+            // Extraer permisos y roles del usuario
+            const userPermissions = res.user?.permisos || res.permissions || [];
+            const userRolesData = res.user?.roles || res.roles || [];
 
+            // Extraer nombres de roles del array de objetos soporta arrays de strings o objetos
+            const roleNames = userRolesData.map((role: any) => 
+                typeof role === 'string' ? role : role.name || role.role_name || role.nombre
+            ).filter(Boolean);
+
+            // Establecer datos de usuario
+            setUserData(res.user, userPermissions, roleNames);
+            
         } catch (error) {
-
-            setUser(null);
+            clearAllState();
+            throw error;
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
+
+    // Función de logout mejorada
+    const logout = async (): Promise<void> => {
+        setLoading(true);
+        try {
+            await http.post(`/api/auth/logout`);
+        } catch (error) {
+            console.warn('⚠️ Error durante logout (probablemente ya desconectado):', error);
+        } finally {
+            clearAllState();
+            setLoading(false);
+        }
+    };
+
+    // Funciones de verificación de permisos mejoradas
+    const hasPermission = (permission: string): boolean => {
+
+        if (!permission) return false;
+        if (isSuperAdmin) {
+            return true;
+        }
+        
+        const hasAccess = permissions.includes(permission);
+        return hasAccess;
+    };
+
+    const hasAnyPermission = (requiredPermissions: string[]): boolean => {
+        if (!requiredPermissions || requiredPermissions.length === 0) return true;
+        if (isSuperAdmin) {
+            return true;
+        }
+        
+        const hasAccess = requiredPermissions.some(permission => permissions.includes(permission));
+        return hasAccess;
+    };
+
+    const hasAllPermissions = (requiredPermissions: string[]): boolean => {
+        if (!requiredPermissions || requiredPermissions.length === 0) return true;
+        if (isSuperAdmin) {
+            return true;
+        }
+        
+        const hasAccess = requiredPermissions.every(permission => permissions.includes(permission));
+        return hasAccess;
+    };
+
+    // Debug en desarrollo
+    useEffect(() => {
+        if (process.env.NODE_ENV === 'development') {
+            console.log('🔐 Estado de autenticación:', {
+                isAuthenticated,
+                user: user?.email || 'No autenticado',
+                isSuperAdmin,
+                permissions: permissions.length,
+                roles: userRoles,
+                loading,
+                initialized
+            });
+        }
+    }, [isAuthenticated, user, isSuperAdmin, permissions, userRoles, loading, initialized]);
 
     return (
         <AuthContext.Provider value={{ 
             user, 
             isAuthenticated, 
-            loading, 
+            loading,
+            initialized,
             login, 
             logout, 
             checkAuth,

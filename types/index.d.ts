@@ -24,6 +24,16 @@ import {
     AppMenuItem
 } from './layout';
 import { Demo, LayoutType, SortOrderType, CustomEvent, ChartDataState, ChartOptionsState, AppMailSidebarItem, AppMailReplyProps, AppMailProps } from './demo';
+import { 
+    Autoridad,
+    Beneficiario,
+    Capacitador,
+    Departamento,
+    TipoActividad,
+    TipoDocumento,
+    TipoProyecto,
+} from './catalogo';
+import { Persona, Usuario } from './persona';
 
 type ChildContainerProps = {
     children: ReactNode;
@@ -58,5 +68,14 @@ export type {
     AppMailSidebarItem,
     AppMailReplyProps,
     AppMailProps,
-    AppMenuItem
+    AppMenuItem,
+    Autoridad,
+    Beneficiario,
+    Capacitador,
+    Departamento,
+    TipoActividad,
+    TipoDocumento,
+    TipoProyecto,
+    Persona,
+    Usuario
 };

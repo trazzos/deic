@@ -8,7 +8,10 @@ import 'primeicons/primeicons.css';
 import '../styles/layout/layout.scss';
 import '../styles/demo/Demos.scss';
 import { AuthProvider } from '@/layout/context/authContext';
-import { NotificationProvider } from '../layout/context/notificationContext'
+import { NotificationProvider } from '../layout/context/notificationContext';
+import { SessionGuard } from '@/src/components/SessionGuard';
+import { AuthRouteGuard } from '@/src/components/AuthRouteGuard';
+import { SessionNotificationManager } from '@/src/components/SessionNotificationManager';
 
 interface RootLayoutProps {
     children: React.ReactNode;
@@ -25,7 +28,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
                     <ConfirmPopup />
                     <AuthProvider>
                         <NotificationProvider>
-                            <LayoutProvider>{children}</LayoutProvider>
+                            <SessionNotificationManager />
+                            <SessionGuard>
+                                <AuthRouteGuard>
+                                    <LayoutProvider>{children}</LayoutProvider>
+                                </AuthRouteGuard>
+                            </SessionGuard>
                         </NotificationProvider>
                     </AuthProvider>
                 </PrimeReactProvider>

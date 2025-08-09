@@ -1,30 +1,37 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { FilterMatchMode, FilterOperator } from 'primereact/api';
-import { useRouter } from 'next/navigation';
 import * as Yup from 'yup';
 
 import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
-import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions, ColumnFilterElementTemplateOptions } from 'primereact/column';
+import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
+import { MenuItem } from 'primereact/menuitem';
 
-import { useAuth } from '@/layout/context/authContext';
+// Components
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+import CustomBreadcrumb from '@/src/components/CustomBreadcrumb';
+
+// Services, Hooks, Contexts, Types
 import { useNotification } from '@/layout/context/notificationContext';
-
-
-import type { Demo } from '@/types';
+import type { TipoDocumento } from '@/types';
 import { TipoDocumentoService } from '@/src/services/catalogos';
+import { usePermissions } from '@/src/hooks/usePermissions';
 import { generateUUID } from '@/src/utils'
 
 
 const TipoDocumentoPage = () => {
 
-     const router = useRouter();
+    const { isSuperAdmin, canUpdate, canDelete, canCreate } = usePermissions();
+    const accessCreate = isSuperAdmin || canCreate('catalogos.tipos_documento');
+    const accessEdit = isSuperAdmin || canUpdate('catalogos.tipos_documento');
+    const accessDelete = isSuperAdmin || canDelete('catalogos.tipos_documento');
 
-    const [TipoDocumentoes, setTipoDocumentoes] = useState<Demo.Customer[]>([]);
+    const [TipoDocumentoes, setTipoDocumentoes] = useState<TipoDocumento[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
@@ -33,7 +40,6 @@ const TipoDocumentoPage = () => {
     const [loadingSaveRows, setLoadingSaveRows] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [rowErrors, setRowErrors] = useState<{ [key: string]: string | null }>({});
-    const { isAuthenticated } = useAuth();
     const { showError, showSuccess } = useNotification();
     
 
@@ -67,12 +73,14 @@ const TipoDocumentoPage = () => {
                     </span>
                     </div>
                     <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                        <Button
-                            className="w-auto" 
-                            type="button" 
-                            icon="pi pi-plus" 
-                            label="Agregar" 
-                            onClick={onAgregar}/>
+                        { accessCreate && (
+                            <Button
+                                className="w-auto" 
+                                type="button" 
+                                icon="pi pi-plus" 
+                                label="Agregar" 
+                                onClick={onAgregar}/>
+                        )}
                     </div>
             </div>
         );
@@ -99,27 +107,28 @@ const TipoDocumentoPage = () => {
 
     useEffect(() => {
 
-        setLoading(true);
-
-        TipoDocumentoService.getListTipoDocumento().then((response) => {
-            const filtrados = response.data.map((tipoDocumento:any) => {
-                return {
-                    ...tipoDocumento,
-                    keyString:generateUUID()
-                }
-            });
-            setTipoDocumentoes(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-    }, []);
-
-    useEffect(() => {
-    
-        if (!loading && !isAuthenticated) {
-            router.replace('/auth/login');
+        const fetchTiposDocumento = async () => {
+            try {
+                const response = await TipoDocumentoService.getListTipoDocumento();
+                const filtrados = response.data.map((tipodocumento:any) => {
+                    return {
+                        ...tipodocumento,
+                        keyString:generateUUID()
+                    }
+                });
+                setTipoDocumentoes(filtrados);
+                initFilters();
+            } catch (error:any) {
+                const message = error?.response?.data?.message || error?.message || 'Error al cargar los tipos de documento';
+                showError('Error', message);
+                setTipoDocumentoes([]);
+            } finally {
+                setLoading(false);
+            }
         }
-    }, [isAuthenticated, loading]);
+
+        fetchTiposDocumento();
+    }, []);
 
     const initFilters = () => {
 
@@ -396,73 +405,91 @@ const TipoDocumentoPage = () => {
     
             return (
                 <div className="flex align-items-center justify-content-center gap-2">
-                    <Button
-                        icon="pi pi-pencil" 
-                        size='small'
-                        onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
-                    />
-                    <Button
-                        icon="pi pi-trash" 
-                        size='small'
-                        severity='danger'
-                        loading={deletingRows[rowData.keyString]}
-                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                    />
+                    {accessEdit && (
+                        <Button
+                            icon="pi pi-pencil" 
+                            size='small'
+                            onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} />
+                    )}
+                    {accessDelete && (
+                        <Button
+                            icon="pi pi-trash" 
+                            size='small'
+                            severity='danger'
+                            loading={deletingRows[rowData.keyString]}
+                            onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} />
+                    )}
                 </div>
             );
         }
     };
 
+    // Breadcrumb items
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Catálogos', icon: 'pi pi-briefcase' },
+        { label: 'Tipos de documento', icon: 'pi pi-user-edit' }
+    ];
+
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de tipos de documento</h5>
-                    <DataTable
-                        value={TipoDocumentoes}
-                        paginator
-                        rows={10}
-                        dataKey="keyString"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No customers found."
-                        editMode='row'
-                        editingRows={rowsEditing}
-                        onRowEditInit={onRowEditInit}
-                        onRowEditCancel={onRowEditCancel}
-                        onRowEditChange={e => setRowsEditing(e.data)}
-                        header={header}
-                    >
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            editor={(options) => textEditor(options)}
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            editor={(options) => textAreaEditor(options)}
-                            style={{ maxWidth: '8rem' }}
-                            />                        
-                        <Column 
-                            rowEditor
-                            body={(rowData, options) => rowEditorTemplate(rowData, options, {
-                                onInit:onRowEditInit,
-                                onSave:handleSave,
-                                onCancel:onRowEditCancel,
-                                onDelete:handleDelete,
-                                isEditing: !!rowsEditing[rowData.keyString]
-                            })}
-                            bodyClassName="text-center" 
-                            
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+        <PermissionGuard
+            resource='catalogos.tipos_documento'
+            action='acceso'
+            fallback={<AccessDenied message='No tiene permisos para acceder a este modulo.'/>}>
+                <div className="grid">
+                    <div className="col-12">
+                        <CustomBreadcrumb
+                                items={breadcrumbItems}
+                                theme="blue"
+                                title="Catálogo de Tipos de documento"
+                                description="Administra el catálogo de tipos de documento"
+                                icon="pi pi-th-large"
+                        />
+                        <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                            <DataTable
+                                value={TipoDocumentoes}
+                                paginator
+                                rows={10}
+                                dataKey="keyString"
+                                filters={filters}
+                                filterDisplay="menu"
+                                loading={loading}
+                                emptyMessage="No se encontraron registros."
+                                editMode='row'
+                                editingRows={rowsEditing}
+                                onRowEditInit={onRowEditInit}
+                                onRowEditCancel={onRowEditCancel}
+                                onRowEditChange={e => setRowsEditing(e.data)}
+                                header={header}
+                            >
+                                <Column 
+                                    field="nombre" 
+                                    header="Nombre" 
+                                    editor={(options) => textEditor(options)}
+                                    filter 
+                                    filterPlaceholder="Busqueda por nombre" 
+                                    style={{ maxWidth: '4rem' }} /> 
+                                <Column 
+                                    field="descripcion" 
+                                    header="Descripción" 
+                                    editor={(options) => textAreaEditor(options)}
+                                    style={{ maxWidth: '8rem' }}
+                                    />                        
+                                <Column 
+                                    rowEditor
+                                    body={(rowData, options) => rowEditorTemplate(rowData, options, {
+                                        onInit:onRowEditInit,
+                                        onSave:handleSave,
+                                        onCancel:onRowEditCancel,
+                                        onDelete:handleDelete,
+                                        isEditing: !!rowsEditing[rowData.keyString]
+                                    })}
+                                    bodyClassName="text-center" 
+                                    style={{ maxWidth: '2rem' }} />
+                            </DataTable>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
+        </PermissionGuard>
     );
 };
 

@@ -12,40 +12,23 @@ import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
 import { Sidebar } from "primereact/sidebar";
 import { confirmPopup } from "primereact/confirmpopup";
 import { InputSwitch, InputSwitchChangeEvent } from "primereact/inputswitch";
-import { BreadCrumb } from "primereact/breadcrumb";
 import { MenuItem } from "primereact/menuitem";
 import { Dialog } from "primereact/dialog";
 import { Password } from "primereact/password";
 import { Tag } from "primereact/tag";
 import { MultiSelect } from "primereact/multiselect";
 
-import { useNotification } from '@/layout/context/notificationContext';
-import { DepartamentoService, PersonaService, RoleService } from "@/src/services";
+// Components
 import PermissionGuard from "@/src/components/PermissionGuard";
 import AccessDenied from "@/src/components/AccessDenied";
+import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
+
+// Services, Hooks, Contexts, Types
+import { useNotification } from '@/layout/context/notificationContext';
+import { DepartamentoService, PersonaService, RoleService } from "@/src/services";
 import { useFormErrorHandler } from '@/src/utils/errorUtils';
-
-
-interface Persona {
-    id: number;
-    departamento_id: number | null;
-    nombre: string;
-    apellido_paterno: string;
-    apellido_materno: string
-    responsable_departamento:string;
-    email: string | null;
-    cuenta_activa?: boolean;     
-    password: string | null;
-    password_confirmation: string | null;
-}
-
-interface Usuario {
-    email: string | null;     
-    password: string | null;
-    roles: string[] | null;
-    password_confirmation: string | null;
-
-}
+import { Persona, Usuario } from '@/types';
+import { usePermissions } from "@/src/hooks/usePermissions";
 
 const formularioSchema = Yup.object().shape({
     departamento_id: Yup.number().required('El departamento es obligatorio'),
@@ -120,6 +103,11 @@ const usuarioSchema = Yup.object().shape({
 
 const PersonasPage = () => {
 
+    const { isSuperAdmin, canUpdate, canDelete, hasPermission } = usePermissions();
+    const accessEdit = isSuperAdmin || canUpdate('gestion_cuentas.personas');
+    const accessDelete = isSuperAdmin || canDelete('gestion_cuentas.personas');
+    const accessAdminCuenta = isSuperAdmin || hasPermission('gestion_cuentas.personas.administrar_cuenta');
+
     const [departamentos, setDepartamentos] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
     const [personas, setPersonas] = useState<Persona[]>([]);
@@ -127,7 +115,7 @@ const PersonasPage = () => {
     const [loadingGuardar, setLoadingGuardar] = useState(false);
     const [visibleFormulario, setVisibleFormulario] = useState(false);
     const [deletingRows, setDeletingRows] = useState<{ [key: string]: boolean }>({});
-     const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+    const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
     const [formularioPersona, setFormularioPersona] = useState<any>({
         id: null,
         departamento_id:null,
@@ -599,33 +587,39 @@ const PersonasPage = () => {
         { label: 'Gestión de cuentas', icon: 'pi pi-briefcase' },
         { label: 'Personas', icon: 'pi pi-user-edit' }
     ];
-    const breadcrumbHome: MenuItem = { icon: 'pi pi-home', command: () => window.location.href = '/' };
-
+    
     const actionsTemplate = (rowData:any, options:any, customHandlers:any) => {
         const tieneCuenta = !!rowData.email;
         return (
             <div className="flex align-items-center justify-content-center gap-2">
-                <Button
-                    icon="pi pi-pencil"
-                    size='small'
-                    onClick={() => customHandlers.onEdit({ data: rowData, index: options.rowIndex })}
-                />
-                <Button
-                    icon="pi pi-trash"
-                    size='small'
-                    severity='danger'
-                    loading={deletingRows[rowData.keyString]}
-                    onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })}
-                />
-                <Button
-                    icon="pi pi-user"
-                    size="small"
-                    severity={tieneCuenta ? 'success' : undefined}
-                    className={tieneCuenta ? '' : 'surface-200 text-900 border-none'}
-                    tooltip="Configurar usuario"
-                    tooltipOptions={{ position: 'top' }}
-                    onClick={() => handleConfigurarUsuario(rowData)}
-                />
+
+               {accessEdit && (
+                    <Button
+                        icon="pi pi-pencil"
+                        size='small'
+                        onClick={() => customHandlers.onEdit({ data: rowData, index: options.rowIndex })}
+                    />
+               )}
+               { accessDelete && (
+                    <Button
+                        icon="pi pi-trash"
+                        size='small'
+                        severity='danger'
+                        loading={deletingRows[rowData.keyString]}
+                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })}
+                    />
+               )}
+               { accessAdminCuenta && (
+                     <Button
+                        icon="pi pi-user"
+                        size="small"
+                        severity={tieneCuenta ? 'success' : undefined}
+                        className={tieneCuenta ? '' : 'surface-200 text-900 border-none'}
+                        tooltip="Configurar usuario"
+                        tooltipOptions={{ position: 'top' }}
+                        onClick={() => handleConfigurarUsuario(rowData)}
+                    />
+               )} 
             </div>
         );
     };
@@ -634,357 +628,333 @@ const PersonasPage = () => {
         <PermissionGuard
             resource='gestion_cuentas'
             action='personas'
-            fallback={<AccessDenied
-                 message="No tienes permiso para acceder a esta sección."
-                />}
+            fallback={<AccessDenied variant="detailed" message="No tienes acceso a esta modulo"/>}
             >
             <div className="grid">
-            <div className="col-12">
-                <div className="mb-3 p-4 border-round-lg bg-gradient-to-r from-green-50 to-emerald-50 border-1 border-green-100 shadow-2">
-                    <style>{`
-                        .custom-breadcrumb-personas .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
-                            color: #065f46 !important;
-                            text-decoration: none;
-                        }
-                        .custom-breadcrumb-personas .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
-                            color: #047857 !important;
-                        }
-                        .custom-breadcrumb-personas .p-breadcrumb-list .p-breadcrumb-separator {
-                            color: #64748b !important;
-                        }
-                        .custom-breadcrumb-personas .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
-                            color: #10b981 !important;
-                        }
-                    `}</style>
-                    <BreadCrumb 
-                        model={breadcrumbItems} 
-                        home={breadcrumbHome}
-                        className="custom-breadcrumb-personas bg-transparent border-none p-0"
+                <div className="col-12">
+                    <CustomBreadcrumb
+                        items={breadcrumbItems}
+                        theme="green"
+                        title="Gestión de Personas"
+                        description="Administra la información del personal y usuarios"
+                        icon="pi pi-users"
                     />
-                    <div className="mt-3">
-                        <h5 className="font-bold text-green-800 m-0 flex align-items-center gap-2">
-                            <i className="pi pi-users text-green-600"></i>
-                            Gestión de Personas
-                        </h5>
-                        <p className="text-sm text-green-600 m-0 mt-1">Administra la información del personal y usuarios</p>
+                    {renderToolbar()}
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                        <DataTable
+                            value={personasFiltradas}
+                            paginator
+                            rows={25}
+                            dataKey="id"
+                            loading={loading}
+                            emptyMessage="No se encontraron registros."
+                            editMode='row'
+                            className="p-datatable-sm border-none shadow-none"
+                            style={{ borderRadius: '1rem' }}
+                        >
+                            <Column
+                                body={bodyNombre}
+                                header="Nombre"
+                                filter
+                                filterPlaceholder="Buscar por nombre"
+                                style={{ minWidth: '10rem' }}
+                            />
+                            <Column
+                                field="nombre_departamento"
+                                header="Departamento"
+                                filter
+                                filterPlaceholder="Buscar por departamento"
+                                style={{ minWidth: '8rem' }}
+                            />
+                            <Column
+                                body={bodyEsResponsable}
+                                bodyClassName="text-center"
+                                header="Responsable de departamento"
+                                style={{ minWidth: '8rem' }}
+                            />
+                            <Column
+                                body={bodyCuentaUsuario}
+                                bodyClassName="text-center"
+                                header="Cuenta de usuario"
+                                style={{ minWidth: '8rem' }}
+                            />
+                            <Column
+                                body={(rowData, options) => actionsTemplate(rowData, options, {
+                                    onEdit: handleEditPersona,
+                                    onDelete: handleDeletePersona,
+                                })}
+                                bodyClassName="text-center"
+                                style={{ minWidth: '7rem' }}
+                            />
+                        </DataTable>
                     </div>
-                </div>
-                {renderToolbar()}
-                <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
-                    <DataTable
-                        value={personasFiltradas}
-                        paginator
-                        rows={25}
-                        dataKey="id"
-                        loading={loading}
-                        emptyMessage="No se encontraron registros."
-                        editMode='row'
-                        className="p-datatable-sm border-none shadow-none"
-                        style={{ borderRadius: '1rem' }}
-                    >
-                        <Column
-                            body={bodyNombre}
-                            header="Nombre"
-                            filter
-                            filterPlaceholder="Buscar por nombre"
-                            style={{ minWidth: '10rem' }}
-                        />
-                        <Column
-                            field="nombre_departamento"
-                            header="Departamento"
-                            filter
-                            filterPlaceholder="Buscar por departamento"
-                            style={{ minWidth: '8rem' }}
-                        />
-                        <Column
-                            body={bodyEsResponsable}
-                            bodyClassName="text-center"
-                            header="Responsable de departamento"
-                            style={{ minWidth: '8rem' }}
-                        />
-                        <Column
-                            body={bodyCuentaUsuario}
-                            bodyClassName="text-center"
-                            header="Cuenta de usuario"
-                            style={{ minWidth: '8rem' }}
-                        />
-                        <Column
-                            body={(rowData, options) => actionsTemplate(rowData, options, {
-                                onEdit: handleEditPersona,
-                                onDelete: handleDeletePersona,
-                            })}
-                            bodyClassName="text-center"
-                            style={{ minWidth: '7rem' }}
-                        />
-                    </DataTable>
-                </div>
-                <Sidebar 
-                    visible={visibleFormulario} 
-                    onHide={() => setVisibleFormulario(false)} 
-                    baseZIndex={1000} 
-                    position="right"
-                    modal={true}
-                    dismissable={false}
-                    className="w-full md:w-20rem lg:w-30rem"
-                    header={customHeader}>
-                    <div className="flex flex-column h-full">
-                        <div className='flex flex-column justify-content-between gap-4'>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Nombre <span className='text-red-600'>*</span></label>
-                                    <InputText  
-                                        name="nombre"
-                                        value={formularioPersona.nombre}
-                                        onChange={handleFormularioChange}></InputText>
-                                    {formularioErrors.nombre && (
-                                        <small className='text-red-600'>{formularioErrors.nombre}</small>
-                                    )}
-                                </div>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Apellido Paterno <span className='text-red-600'>*</span></label>
-                                    <InputText  
-                                        name="apellido_paterno"
-                                        value={formularioPersona.apellido_paterno}
-                                        onChange={handleFormularioChange}></InputText>
-                                    {formularioErrors.apellido_paterno && (
-                                        <small className='text-red-600'>{formularioErrors.apellido_paterno}</small>
-                                    )}
-                                </div>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Apellido Materno <span className='text-red-600'>*</span></label>
-                                    <InputText  
-                                        name="apellido_materno"
-                                        value={formularioPersona.apellido_materno}
-                                        onChange={handleFormularioChange}></InputText>
-                                    {formularioErrors.apellido_materno && (
-                                        <small className='text-red-600'>{formularioErrors.apellido_materno}</small>
-                                    )}
-                                </div> 
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Departamento <span className='text-red-600'>*</span></label>
-                                    <Dropdown 
-                                                name="departamento_id"
-                                                value={formularioPersona.departamento_id}
-                                                onChange={handleFormularioChange}
-                                                options={departamentos} 
-                                                optionLabel="nombre" 
-                                                optionValue='id'
-                                                placeholder="Seleccione una opción" 
-                                                className="w-full"/>
-                                    {formularioErrors.departamento_id && (
-                                        <small className='text-red-600'>{formularioErrors.departamento_id}</small>
-                                    )}
-                                </div>
-                                <div className="flex flex-row align-items-center gap-2">
-                                    <label htmlFor="responsable_departamento" 
-                                           className='font-medium'>¿Es responsable de departamento?</label>
-                                    <InputSwitch 
-                                        inputId="responsable_departamento"
-                                        checked={formularioPersona?.responsable_departamento === true }
-                                        name="responsable_departamento"
-                                        onChange={(e: InputSwitchChangeEvent) => handleFormularioChange(e)} />
-                                        <span className='text-red-600'>*</span>
+                    <Sidebar 
+                        visible={visibleFormulario} 
+                        onHide={() => setVisibleFormulario(false)} 
+                        baseZIndex={1000} 
+                        position="right"
+                        modal={true}
+                        dismissable={false}
+                        className="w-full md:w-20rem lg:w-30rem"
+                        header={customHeader}>
+                        <div className="flex flex-column h-full">
+                            <div className='flex flex-column justify-content-between gap-4'>
+                                    <div className="flex flex-column gap-2">
+                                        <label htmlFor="" className='font-medium'>Nombre <span className='text-red-600'>*</span></label>
+                                        <InputText  
+                                            name="nombre"
+                                            value={formularioPersona.nombre}
+                                            onChange={handleFormularioChange}></InputText>
+                                        {formularioErrors.nombre && (
+                                            <small className='text-red-600'>{formularioErrors.nombre}</small>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-column gap-2">
+                                        <label htmlFor="" className='font-medium'>Apellido Paterno <span className='text-red-600'>*</span></label>
+                                        <InputText  
+                                            name="apellido_paterno"
+                                            value={formularioPersona.apellido_paterno}
+                                            onChange={handleFormularioChange}></InputText>
+                                        {formularioErrors.apellido_paterno && (
+                                            <small className='text-red-600'>{formularioErrors.apellido_paterno}</small>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-column gap-2">
+                                        <label htmlFor="" className='font-medium'>Apellido Materno <span className='text-red-600'>*</span></label>
+                                        <InputText  
+                                            name="apellido_materno"
+                                            value={formularioPersona.apellido_materno}
+                                            onChange={handleFormularioChange}></InputText>
+                                        {formularioErrors.apellido_materno && (
+                                            <small className='text-red-600'>{formularioErrors.apellido_materno}</small>
+                                        )}
+                                    </div> 
+                                    <div className="flex flex-column gap-2">
+                                        <label htmlFor="" className='font-medium'>Departamento <span className='text-red-600'>*</span></label>
+                                        <Dropdown 
+                                                    name="departamento_id"
+                                                    value={formularioPersona.departamento_id}
+                                                    onChange={handleFormularioChange}
+                                                    options={departamentos} 
+                                                    optionLabel="nombre" 
+                                                    optionValue='id'
+                                                    placeholder="Seleccione una opción" 
+                                                    className="w-full"/>
+                                        {formularioErrors.departamento_id && (
+                                            <small className='text-red-600'>{formularioErrors.departamento_id}</small>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-row align-items-center gap-2">
+                                        <label htmlFor="responsable_departamento" 
+                                            className='font-medium'>¿Es responsable de departamento?</label>
+                                        <InputSwitch 
+                                            inputId="responsable_departamento"
+                                            checked={formularioPersona?.responsable_departamento === true }
+                                            name="responsable_departamento"
+                                            onChange={(e: InputSwitchChangeEvent) => handleFormularioChange(e)} />
+                                            <span className='text-red-600'>*</span>
+                                        
+                                        {formularioErrors.responsable_departamento && (
+                                            <small className='text-red-600'>{formularioErrors.responsable_departamento}</small>
+                                        )}
+                                    </div> 
                                     
-                                    {formularioErrors.responsable_departamento && (
-                                        <small className='text-red-600'>{formularioErrors.responsable_departamento}</small>
+                                    {!formularioPersona.id && (
+                                        <>
+                                            <div className="flex flex-column gap-2">
+                                                <label htmlFor="" className='font-medium'>Email</label>
+                                                <InputText  
+                                                    name="email"
+                                                    value={formularioPersona.email ?? ''}
+                                                    onChange={handleFormularioChange}></InputText>
+                                                {formularioErrors.email && (
+                                                    <small className='text-red-600'>{formularioErrors.email}</small>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-column gap-2">
+                                                <label htmlFor="" className='font-medium'>Contraseña</label>
+                                                <InputText  
+                                                    type="password"
+                                                    name="password"
+                                                    value={formularioPersona.password ?? ''}
+                                                    onChange={handleFormularioChange}></InputText>
+                                                {formularioErrors.password && (
+                                                    <small className='text-red-600'>{formularioErrors.password}</small>
+                                                )}
+                                            </div> 
+                                            <div className="flex flex-column gap-2">
+                                                <label htmlFor="" className='font-medium'>Confirmar Contraseña</label>
+                                                <InputText  
+                                                    type="password"
+                                                    name="password_confirmation"
+                                                    value={formularioPersona.password_confirmation ?? ''}
+                                                    onChange={handleFormularioChange}></InputText>
+                                                {formularioErrors.password_confirmation && (
+                                                    <small className='text-red-600'>{formularioErrors.password_confirmation}</small>
+                                                )} 
+                                            </div>
+                                        </>
                                     )}
-                                </div> 
-                                
-                                {!formularioPersona.id && (
-                                    <>
-                                        <div className="flex flex-column gap-2">
-                                            <label htmlFor="" className='font-medium'>Email</label>
-                                            <InputText  
-                                                name="email"
-                                                value={formularioPersona.email ?? ''}
-                                                onChange={handleFormularioChange}></InputText>
-                                            {formularioErrors.email && (
-                                                <small className='text-red-600'>{formularioErrors.email}</small>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-column gap-2">
-                                            <label htmlFor="" className='font-medium'>Contraseña</label>
-                                            <InputText  
-                                                type="password"
-                                                name="password"
-                                                value={formularioPersona.password ?? ''}
-                                                onChange={handleFormularioChange}></InputText>
-                                            {formularioErrors.password && (
-                                                <small className='text-red-600'>{formularioErrors.password}</small>
-                                            )}
-                                        </div> 
-                                        <div className="flex flex-column gap-2">
-                                            <label htmlFor="" className='font-medium'>Confirmar Contraseña</label>
-                                            <InputText  
-                                                type="password"
-                                                name="password_confirmation"
-                                                value={formularioPersona.password_confirmation ?? ''}
-                                                onChange={handleFormularioChange}></InputText>
-                                            {formularioErrors.password_confirmation && (
-                                                <small className='text-red-600'>{formularioErrors.password_confirmation}</small>
-                                            )} 
-                                        </div>
-                                    </>
+                            </div>
+                            <div className="mt-auto">
+                                <hr className="mb-3 mx-2 border-top-1 border-none surface-border" />
+                                <div className='flex justify-content-between align-items-center gap-2'>
+                                    <Button label="Cancelar" 
+                                            icon="pi pi-times"
+                                            severity='danger'
+                                            disabled={loadingGuardar} 
+                                            onClick={() => setVisibleFormulario(false)}>
+                                    </Button>
+                                    <Button label="Guardar" 
+                                            icon="pi pi-save"
+                                            loading={loadingGuardar}
+                                            disabled={loadingGuardar} 
+                                            onClick={handleSaveData}></Button>
+                                </div>
+                            </div>
+                        </div>
+                    </Sidebar>
+
+                    {/* Dialog para configurar usuario */}
+                    <Dialog
+                        visible={visibleUsuarioDialog}
+                        onHide={() => setVisibleUsuarioDialog(false)}
+                        header={
+                            <div className="flex align-items-center gap-2">
+                                <i className="pi pi-user text-blue-600"></i>
+                                <span className="font-bold text-blue-800">
+                                    {selectedPersonaForUser?.email ? 'Editar Usuario' : 'Crear Usuario'}
+                                </span>
+                            </div>
+                        }
+                        modal
+                        style={{ width: '450px' }}
+                        className="p-dialog-header-icons-only"
+                        dismissableMask
+                    >
+                        <div className="mb-4 p-3 bg-blue-50 border-round border-1 border-blue-100">
+                            <div className="flex align-items-center gap-2">
+                                <i className="pi pi-info-circle text-blue-600"></i>
+                                <div>
+                                    <div className="font-medium text-blue-800">
+                                        {selectedPersonaForUser?.nombre} {selectedPersonaForUser?.apellido_paterno} {selectedPersonaForUser?.apellido_materno}
+                                    </div>
+                                    <div className="text-sm text-blue-600">
+                                        {selectedPersonaForUser?.email ? 'Modificar credenciales de acceso' : 'Crear nueva cuenta de usuario'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-column gap-4">
+                            <div className="flex flex-column gap-2">
+                                <label htmlFor="email" className="font-medium text-900">
+                                    Email <span className="text-red-500">*</span>
+                                </label>
+                                <InputText
+                                    id="email"
+                                    name="email"
+                                    value={usuarioData.email ?? ''}
+                                    onChange={handleUsuarioChange}
+                                    placeholder="usuario@ejemplo.com"
+                                    className={usuarioErrors.email ? 'p-invalid' : ''}
+                                />
+                                {usuarioErrors.email && (
+                                    <small className="text-red-500">{usuarioErrors.email}</small>
+                                )}
+                            </div>
+                            <div className="flex flex-column gap-2">
+                                <label htmlFor="roles" className="font-medium text-900">
+                                    Roles de acceso <span className="text-red-500">*</span>
+                                </label>
+                                <MultiSelect
+                                    id="roles"
+                                    showClear
+                                    name="roles"
+                                    value={usuarioData.roles}
+                                    options={roles}
+                                    onChange={handleUsuarioChange}
+                                    optionLabel="texto"
+                                    optionValue="clave"
+                                    placeholder="Seleccione una opción"
+                                    className={usuarioErrors.roles ? 'p-invalid' : ''}
+                                />
+                                {usuarioErrors.roles && (
+                                    <small className="text-red-500">{usuarioErrors.roles}</small>
+                                )}
+                            </div>
+
+                            <div className="flex flex-column gap-2">
+                                <label htmlFor="password" className="font-medium text-900">
+                                    {selectedPersonaForUser?.email ? 'Nueva Contraseña' : 'Contraseña'} 
+                                    <span className="text-red-500">*</span>
+                                </label>
+                                <Password
+                                    id="password"
+                                    name="password"
+                                    value={usuarioData.password ?? ''}
+                                    onChange={handleUsuarioChange}
+                                    placeholder="Mínimo 8 caracteres"
+                                    toggleMask
+                                    feedback={false}
+                                    className={usuarioErrors.password ? 'p-invalid' : ''}
+                                />
+                                {usuarioErrors.password && (
+                                    <small className="text-red-500">{usuarioErrors.password}</small>
+                                )}
+                            </div>
+
+                            <div className="flex flex-column gap-2">
+                                <label htmlFor="password_confirmation" className="font-medium text-900">
+                                    Confirmar Contraseña <span className="text-red-500">*</span>
+                                </label>
+                                <Password
+                                    id="password_confirmation"
+                                    name="password_confirmation"
+                                    value={usuarioData.password_confirmation ?? ''}
+                                    onChange={handleUsuarioChange}
+                                    placeholder="Repetir contraseña"
+                                    toggleMask
+                                    feedback={false}
+                                    className={usuarioErrors.password_confirmation ? 'p-invalid' : ''}
+                                />
+                                {usuarioErrors.password_confirmation && (
+                                    <small className="text-red-500">{usuarioErrors.password_confirmation}</small>
+                                )}
+                            </div>
+                            {selectedPersonaForUser?.email && (
+                                <Button
+                                    label= { selectedPersonaForUser?.cuenta_activa ? "Inhabilitar Acceso" : "Habilitar Acceso" }
+                                    icon={ selectedPersonaForUser?.cuenta_activa ? "pi pi-lock" : "pi pi-lock-open" }
+                                    severity={ selectedPersonaForUser?.cuenta_activa ? 'success' : 'danger' }
+                                    outlined
+                                    onClick={handleDisableUsuario}
+                                    disabled={loadingUsuario}
+                                    />
                                 )}
                         </div>
-                        <div className="mt-auto">
-                            <hr className="mb-3 mx-2 border-top-1 border-none surface-border" />
-                            <div className='flex justify-content-between align-items-center gap-2'>
-                                <Button label="Cancelar" 
+
+                        <div className="flex justify-content-between align-items-center mt-6 pt-4 border-top-1 surface-border">
+                            { (selectedPersonaForUser?.cuenta_activa || selectedPersonaForUser?.email === null) && (
+                                <div className="flex gap-2 ml-auto">
+                                    <Button
+                                        label="Cancelar"
                                         icon="pi pi-times"
-                                        severity='danger'
-                                        disabled={loadingGuardar} 
-                                        onClick={() => setVisibleFormulario(false)}>
-                                </Button>
-                                <Button label="Guardar" 
+                                        outlined
+                                        onClick={() => setVisibleUsuarioDialog(false)}
+                                        disabled={loadingUsuario}
+                                    />
+                                    <Button
+                                        label={selectedPersonaForUser?.email ? 'Actualizar' : 'Crear Usuario'}
                                         icon="pi pi-save"
-                                        loading={loadingGuardar}
-                                        disabled={loadingGuardar} 
-                                        onClick={handleSaveData}></Button>
-                            </div>
+                                        loading={loadingUsuario}
+                                        onClick={handleSaveUsuario}
+                                    />
+                                </div>)}
                         </div>
-                    </div>
-                </Sidebar>
-
-                {/* Dialog para configurar usuario */}
-                <Dialog
-                    visible={visibleUsuarioDialog}
-                    onHide={() => setVisibleUsuarioDialog(false)}
-                    header={
-                        <div className="flex align-items-center gap-2">
-                            <i className="pi pi-user text-blue-600"></i>
-                            <span className="font-bold text-blue-800">
-                                {selectedPersonaForUser?.email ? 'Editar Usuario' : 'Crear Usuario'}
-                            </span>
-                        </div>
-                    }
-                    modal
-                    style={{ width: '450px' }}
-                    className="p-dialog-header-icons-only"
-                    dismissableMask
-                >
-                    <div className="mb-4 p-3 bg-blue-50 border-round border-1 border-blue-100">
-                        <div className="flex align-items-center gap-2">
-                            <i className="pi pi-info-circle text-blue-600"></i>
-                            <div>
-                                <div className="font-medium text-blue-800">
-                                    {selectedPersonaForUser?.nombre} {selectedPersonaForUser?.apellido_paterno} {selectedPersonaForUser?.apellido_materno}
-                                </div>
-                                <div className="text-sm text-blue-600">
-                                    {selectedPersonaForUser?.email ? 'Modificar credenciales de acceso' : 'Crear nueva cuenta de usuario'}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-column gap-4">
-                        <div className="flex flex-column gap-2">
-                            <label htmlFor="email" className="font-medium text-900">
-                                Email <span className="text-red-500">*</span>
-                            </label>
-                            <InputText
-                                id="email"
-                                name="email"
-                                value={usuarioData.email ?? ''}
-                                onChange={handleUsuarioChange}
-                                placeholder="usuario@ejemplo.com"
-                                className={usuarioErrors.email ? 'p-invalid' : ''}
-                            />
-                            {usuarioErrors.email && (
-                                <small className="text-red-500">{usuarioErrors.email}</small>
-                            )}
-                        </div>
-                        <div className="flex flex-column gap-2">
-                            <label htmlFor="roles" className="font-medium text-900">
-                                Roles de acceso <span className="text-red-500">*</span>
-                            </label>
-                            <MultiSelect
-                                id="roles"
-                                showClear
-                                name="roles"
-                                value={usuarioData.roles}
-                                options={roles}
-                                onChange={handleUsuarioChange}
-                                optionLabel="texto"
-                                optionValue="clave"
-                                placeholder="Seleccione una opción"
-                                className={usuarioErrors.roles ? 'p-invalid' : ''}
-                            />
-                            {usuarioErrors.roles && (
-                                <small className="text-red-500">{usuarioErrors.roles}</small>
-                            )}
-                        </div>
-
-                        <div className="flex flex-column gap-2">
-                            <label htmlFor="password" className="font-medium text-900">
-                                {selectedPersonaForUser?.email ? 'Nueva Contraseña' : 'Contraseña'} 
-                                <span className="text-red-500">*</span>
-                            </label>
-                            <Password
-                                id="password"
-                                name="password"
-                                value={usuarioData.password ?? ''}
-                                onChange={handleUsuarioChange}
-                                placeholder="Mínimo 8 caracteres"
-                                toggleMask
-                                feedback={false}
-                                className={usuarioErrors.password ? 'p-invalid' : ''}
-                            />
-                            {usuarioErrors.password && (
-                                <small className="text-red-500">{usuarioErrors.password}</small>
-                            )}
-                        </div>
-
-                        <div className="flex flex-column gap-2">
-                            <label htmlFor="password_confirmation" className="font-medium text-900">
-                                Confirmar Contraseña <span className="text-red-500">*</span>
-                            </label>
-                            <Password
-                                id="password_confirmation"
-                                name="password_confirmation"
-                                value={usuarioData.password_confirmation ?? ''}
-                                onChange={handleUsuarioChange}
-                                placeholder="Repetir contraseña"
-                                toggleMask
-                                feedback={false}
-                                className={usuarioErrors.password_confirmation ? 'p-invalid' : ''}
-                            />
-                            {usuarioErrors.password_confirmation && (
-                                <small className="text-red-500">{usuarioErrors.password_confirmation}</small>
-                            )}
-                        </div>
-                        {selectedPersonaForUser?.email && (
-                            <Button
-                                label= { selectedPersonaForUser?.cuenta_activa ? "Inhabilitar Acceso" : "Habilitar Acceso" }
-                                icon={ selectedPersonaForUser?.cuenta_activa ? "pi pi-lock" : "pi pi-lock-open" }
-                                severity={ selectedPersonaForUser?.cuenta_activa ? 'success' : 'danger' }
-                                outlined
-                                onClick={handleDisableUsuario}
-                                disabled={loadingUsuario}
-                                />
-                            )}
-                    </div>
-
-                    <div className="flex justify-content-between align-items-center mt-6 pt-4 border-top-1 surface-border">
-                        { (selectedPersonaForUser?.cuenta_activa || selectedPersonaForUser?.email === null) && (
-                            <div className="flex gap-2 ml-auto">
-                                <Button
-                                    label="Cancelar"
-                                    icon="pi pi-times"
-                                    outlined
-                                    onClick={() => setVisibleUsuarioDialog(false)}
-                                    disabled={loadingUsuario}
-                                />
-                                <Button
-                                    label={selectedPersonaForUser?.email ? 'Actualizar' : 'Crear Usuario'}
-                                    icon="pi pi-save"
-                                    loading={loadingUsuario}
-                                    onClick={handleSaveUsuario}
-                                />
-                        </div>)}
-                    </div>
-                </Dialog>
+                    </Dialog>
+                </div>
             </div>
-        </div>
         </PermissionGuard>
         
     );

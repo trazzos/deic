@@ -1,0 +1,98 @@
+/* Estilos personalizados para BreadCrumb */
+
+/* Estilo base para breadcrumbs personalizados */
+.custom-breadcrumb {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Estilo verde para módulos de gestión */
+.custom-breadcrumb-green .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+    color: #065f46 !important;
+    text-decoration: none;
+}
+
+.custom-breadcrumb-green .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+    color: #047857 !important;
+}
+
+.custom-breadcrumb-green .p-breadcrumb-list .p-breadcrumb-separator {
+    color: #64748b !important;
+}
+
+.custom-breadcrumb-green .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+    color: #10b981 !important;
+}
+
+/* Estilo azul para módulos de catálogos */
+.custom-breadcrumb-blue .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+    color: #1e3a8a !important;
+    text-decoration: none;
+}
+
+.custom-breadcrumb-blue .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+    color: #1d4ed8 !important;
+}
+
+.custom-breadcrumb-blue .p-breadcrumb-list .p-breadcrumb-separator {
+    color: #64748b !important;
+}
+
+.custom-breadcrumb-blue .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+    color: #3b82f6 !important;
+}
+
+/* Estilo púrpura para módulos de proyectos */
+.custom-breadcrumb-purple .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+    color: #581c87 !important;
+    text-decoration: none;
+}
+
+.custom-breadcrumb-purple .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+    color: #7c3aed !important;
+}
+
+.custom-breadcrumb-purple .p-breadcrumb-list .p-breadcrumb-separator {
+    color: #64748b !important;
+}
+
+.custom-breadcrumb-purple .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+    color: #8b5cf6 !important;
+}
+
+/* Estilo naranja para módulos de construcción */
+.custom-breadcrumb-orange .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+    color: #9a3412 !important;
+    text-decoration: none;
+}
+
+.custom-breadcrumb-orange .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+    color: #ea580c !important;
+}
+
+.custom-breadcrumb-orange .p-breadcrumb-list .p-breadcrumb-separator {
+    color: #64748b !important;
+}
+
+.custom-breadcrumb-orange .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+    color: #f97316 !important;
+}
+
+/* Estilo gris para módulos de utilidades */
+.custom-breadcrumb-gray .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
+    color: #374151 !important;
+    text-decoration: none;
+}
+
+.custom-breadcrumb-gray .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
+    color: #4b5563 !important;
+}
+
+.custom-breadcrumb-gray .p-breadcrumb-list .p-breadcrumb-separator {
+    color: #64748b !important;
+}
+
+.custom-breadcrumb-gray .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
+    color: #6b7280 !important;
+}

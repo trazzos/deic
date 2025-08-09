@@ -17,7 +17,7 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
     const topbarmenuRef = useRef(null);
     const topbarmenudetailRef = useRef<Menu>(null);
     const topbarmenubuttonRef = useRef(null);
-    const { logout, user } =  useAuth();
+    const { logout, user, userRoles } =  useAuth();
     const router = useRouter();
     const profilePanelRef = useRef<OverlayPanel>(null);
     const itemsMenu = [
@@ -64,32 +64,70 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
                 className="p-link layout-topbar-menu-button layout-topbar-button"
                     onClick={e => profilePanelRef.current?.toggle(e)}
                 >
-                    <i className="pi pi-user" />
-                    <span className="font-semibold text-primary-800 d-none d-md-inline">{user?.nombre || 'Usuario'}</span>
+                    <i className="pi pi-ellipsis-v" />
                 </button>
             <div ref={topbarmenuRef} className={classNames('layout-topbar-menu', { 'layout-topbar-menu-mobile-active': layoutState.profileSidebarVisible })}>
                 <button
-                type="button"
-                className="p-link layout-topbar-button"
+                    type="button"
+                    className="p-link layout-topbar-button layout-topbar-profile-button"
                     onClick={e => profilePanelRef.current?.toggle(e)}
                 >
-                    <i className="pi pi-user" />
-                    <span className="font-semibold text-primary-800 d-none d-md-inline">{user?.nombre || 'Usuario'}</span>
+                    <div className="layout-topbar-profile-content">
+                        <Avatar 
+                            icon="pi pi-user" 
+                            shape="circle" 
+                            size="normal" 
+                            className="layout-topbar-avatar"
+                        />
+                        <div className="layout-topbar-profile-text">
+                            <span className="layout-topbar-profile-name">{user?.name || 'Usuario'}</span>
+                            <span className="layout-topbar-profile-role">{userRoles?.[0] || 'Sin rol'}</span>
+                        </div>
+                        <i className="pi pi-chevron-down layout-topbar-profile-icon" />
+                    </div>
                 </button>
 
-                <OverlayPanel ref={profilePanelRef} className="p-3" style={{ minWidth: 220, borderRadius: 16 }}>
+                <OverlayPanel ref={profilePanelRef} className="p-3" style={{ minWidth: 280, borderRadius: 16 }}>
                     <div className="flex flex-column align-items-center gap-2 mb-3">
                         <Avatar icon="pi pi-user" shape="circle" size="xlarge" className="bg-primary-100 text-primary-700 mb-2" />
-                        <span className="font-bold text-lg text-primary-800">{user?.nombre || 'Usuario'}</span>
+                        <span className="font-bold text-lg text-primary-800">{user?.name || 'Usuario'}</span>
                         <span className="text-600 text-sm">{user?.email || ''}</span>
+                        {userRoles && userRoles.length > 0 && (
+                            <div className="flex flex-wrap gap-1 justify-content-center">
+                                {userRoles.slice(0, 3).map((role: string, index: number) => (
+                                    <span key={index} className="text-500 text-xs bg-primary-50 px-2 py-1 border-round-lg">
+                                        {role}
+                                    </span>
+                                ))}
+                                {userRoles.length > 3 && (
+                                    <span className="text-500 text-xs bg-gray-100 px-2 py-1 border-round-lg">
+                                        +{userRoles.length - 3} más
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
-                    <Button
-                        label="Cerrar sesión"
-                        icon="pi pi-sign-out"
-                        severity="danger"
-                        className="w-full p-button-lg border-round-xl"
-                        onClick={handleLogout}
-                    />
+                    <div className="flex flex-column gap-2">
+                        {/*
+                        <Button
+                            label="Ver Perfil"
+                            icon="pi pi-user"
+                            severity="secondary"
+                            outlined
+                            className="w-full p-button-sm border-round-xl"
+                            onClick={() => {
+                                profilePanelRef.current?.hide();
+                                // Aquí puedes agregar navegación al perfil
+                            }}
+                        />*/}
+                        <Button
+                            label="Cerrar sesión"
+                            icon="pi pi-sign-out"
+                            severity="danger"
+                            className="w-full p-button-sm border-round-xl"
+                            onClick={handleLogout}
+                        />
+                    </div>
                 </OverlayPanel>
             </div>
         </div>

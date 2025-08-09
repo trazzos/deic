@@ -15,12 +15,10 @@ export const useSessionValidator = () => {
                 const sessionData = getStoredPermissionsSecurely();
                 if (!sessionData) {
                     // Los datos han expirado o son inválidos
-                    console.warn('Sesión de permisos expirada o inválida, cerrando sesión...');
                     clearSessionData();
                     logout();
                 }
             } catch (error) {
-                console.error('Error validando sesión:', error);
                 clearSessionData();
                 logout();
             }

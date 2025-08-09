@@ -2,7 +2,6 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import React, { useContext, useState, useEffect } from 'react';
-import { Checkbox } from 'primereact/checkbox';
 import { Button } from 'primereact/button';
 import { Password } from 'primereact/password';
 import { LayoutContext } from '../../../../layout/context/layoutcontext';
@@ -14,7 +13,6 @@ import { classNames } from 'primereact/utils';
 const LoginPage = () => {
     const [password, setPassword] = useState('');
     const [email, setEmail] = useState('');
-    const [checked, setChecked] = useState(false);
     const { layoutConfig } = useContext(LayoutContext);
     const { login, loading, isAuthenticated } = useAuth();
     const { showSuccess, showError } = useNotification();
@@ -44,7 +42,6 @@ const LoginPage = () => {
         if (!validate()) return;
         try {
             await login(email, password);
-            showSuccess('¡Éxito!', 'Has iniciado sesión correctamente.');
             router.push('/');
             
         } catch (error) {

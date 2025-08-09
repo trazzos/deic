@@ -5,27 +5,35 @@ import { useRouter } from 'next/navigation';
 import * as Yup from 'yup';
 
 import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
-import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions, ColumnFilterElementTemplateOptions } from 'primereact/column';
+import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
 import { Dropdown } from 'primereact/dropdown';
+import { MenuItem } from 'primereact/menuitem';
 
-import { useAuth } from '@/layout/context/authContext';
+// Components
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+import CustomBreadcrumb from '@/src/components/CustomBreadcrumb';
+
+// Services, Hooks, Contexts, Types
 import { useNotification } from '@/layout/context/notificationContext';
-
-
-import type { Demo } from '@/types';
+import type { TipoActividad } from '@/types';
 import { TipoActividadService } from '@/src/services/catalogos';
+import { usePermissions } from '@/src/hooks/usePermissions';
 import { generateUUID } from '@/src/utils'
 
 
 const TipoActividadPage = () => {
 
-     const router = useRouter();
+    const { isSuperAdmin, canUpdate, canDelete, canCreate } = usePermissions();
+    const accessCreate = isSuperAdmin || canCreate('catalogos.tipos_actividad');
+    const accessEdit = isSuperAdmin || canUpdate('catalogos.tipos_actividad');
+    const accessDelete = isSuperAdmin || canDelete('catalogos.tipos_actividad');
 
-    const [TipoActividades, setTipoActividades] = useState<Demo.Customer[]>([]);
+    const [TipoActividades, setTipoActividades] = useState<TipoActividad[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
@@ -34,7 +42,6 @@ const TipoActividadPage = () => {
     const [loadingSaveRows, setLoadingSaveRows] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [rowErrors, setRowErrors] = useState<{ [key: string]: string | null }>({});
-    const { isAuthenticated } = useAuth();
     const { showError, showSuccess } = useNotification();
     
 
@@ -69,12 +76,14 @@ const TipoActividadPage = () => {
                     </span>
                     </div>
                     <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                        <Button
+                        { accessCreate && (
+                            <Button
                             className="w-auto" 
                             type="button" 
                             icon="pi pi-plus" 
                             label="Agregar" 
                             onClick={onAgregar}/>
+                        )}
                     </div>
             </div>
         );
@@ -96,33 +105,33 @@ const TipoActividadPage = () => {
         setEditBuffer((prev:any) => ({
             ...prev,
             [uuid]: {...nuevo}
-        }));
-          
+        }));  
     }
 
     useEffect(() => {
 
-        setLoading(true);
-
-        TipoActividadService.getListTipoActividad().then((response) => {
-            const filtrados = response.data.map((tipoactividad:any) => {
-                return {
-                    ...tipoactividad,
-                    keyString:generateUUID()
-                }
-            });
-            setTipoActividades(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-    }, []);
-
-    useEffect(() => {
-    
-        if (!loading && !isAuthenticated) {
-            router.replace('/auth/login');
+        const fetchTiposActividad = async () => {
+            try {
+                const response = await TipoActividadService.getListTipoActividad();
+                const filtrados = response.data.map((tipoactividad:any) => {
+                    return {
+                        ...tipoactividad,
+                        keyString:generateUUID()
+                    }
+                });
+                setTipoActividades(filtrados);
+                setLoading(false);
+                initFilters();
+            } catch (error:any) {
+                const message = error?.response?.data?.message || error?.message || 'Error al cargar los tipos de actividad';
+                showError('Error', message);
+                setTipoActividades([]);
+            } finally {
+                setLoading(false);
+            }
         }
-    }, [isAuthenticated, loading]);
+        fetchTiposActividad(); 
+    }, []);
 
     const initFilters = () => {
 
@@ -441,79 +450,100 @@ const TipoActividadPage = () => {
     
             return (
                 <div className="flex align-items-center justify-content-center gap-2">
-                    <Button
-                        icon="pi pi-pencil" 
-                        size='small'
-                        onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
-                    />
-                    <Button
-                        icon="pi pi-trash" 
-                        size='small'
-                        severity='danger'
-                        loading={deletingRows[rowData.keyString]}
-                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                    />
+                    { accessEdit && (
+                        <Button
+                            icon="pi pi-pencil" 
+                            size='small'
+                            onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
+                        />
+                    )}
+                    { accessDelete && (
+                        <Button
+                            icon="pi pi-trash" 
+                            size='small'
+                            severity='danger'
+                            loading={deletingRows[rowData.keyString]}
+                            onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
+                        />
+                    )}
                 </div>
             );
         }
     };
 
+    // Breadcrumb items
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Catálogos', icon: 'pi pi-briefcase' },
+        { label: 'Tipos de actividad', icon: 'pi pi-user-edit' }
+    ];
+
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de tipos de actividad</h5>
-                    <DataTable
-                        value={TipoActividades}
-                        paginator
-                        rows={10}
-                        dataKey="keyString"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No customers found."
-                        editMode='row'
-                        editingRows={rowsEditing}
-                        onRowEditInit={onRowEditInit}
-                        onRowEditCancel={onRowEditCancel}
-                        onRowEditChange={e => setRowsEditing(e.data)}
-                        header={header}
-                    >
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            editor={(options) => textEditor(options)}
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            editor={(options) => textAreaEditor(options)}
-                            style={{ maxWidth: '8rem' }}
-                            />     
-                        <Column 
-                            field="mostrar_en_calendario" 
-                            header="Mostrar en calendario" 
-                            editor={(options) => selectMostrarEditor(options)}
-                            style={{ maxWidth: '2rem' }}
-                            />                        
-                        <Column 
-                            rowEditor
-                            body={(rowData, options) => rowEditorTemplate(rowData, options, {
-                                onInit:onRowEditInit,
-                                onSave:handleSave,
-                                onCancel:onRowEditCancel,
-                                onDelete:handleDelete,
-                                isEditing: !!rowsEditing[rowData.keyString]
-                            })}
-                            bodyClassName="text-center" 
-                            
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+       <PermissionGuard
+            resource="catalogos.tipos_actividad"
+            action='acceso'
+            fallback={<AccessDenied message='No tienes permiso para acceder a este modulo.' />}>
+            <div className="grid">
+                <div className="col-12">
+                    <CustomBreadcrumb
+                            items={breadcrumbItems}
+                            theme="blue"
+                            title="Catálogo de Tipos de Actividad"
+                            description="Administra el catálogo de tipos de actividad"
+                            icon="pi pi-th-large"
+                    />
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                        <DataTable
+                            value={TipoActividades}
+                            paginator
+                            rows={10}
+                            dataKey="keyString"
+                            filters={filters}
+                            filterDisplay="menu"
+                            loading={loading}
+                            emptyMessage="No se encontraron registros."
+                            editMode='row'
+                            editingRows={rowsEditing}
+                            onRowEditInit={onRowEditInit}
+                            onRowEditCancel={onRowEditCancel}
+                            onRowEditChange={e => setRowsEditing(e.data)}
+                            header={header}
+                        >
+                            <Column 
+                                field="nombre" 
+                                header="Nombre" 
+                                editor={(options) => textEditor(options)}
+                                filter 
+                                filterPlaceholder="Busqueda por nombre" 
+                                style={{ maxWidth: '4rem' }} /> 
+                            <Column 
+                                field="descripcion" 
+                                header="Descripción" 
+                                editor={(options) => textAreaEditor(options)}
+                                style={{ maxWidth: '8rem' }}
+                                />     
+                            <Column 
+                                field="mostrar_en_calendario" 
+                                header="Mostrar en calendario" 
+                                editor={(options) => selectMostrarEditor(options)}
+                                style={{ maxWidth: '2rem' }}
+                                />                        
+                            <Column 
+                                rowEditor
+                                body={(rowData, options) => rowEditorTemplate(rowData, options, {
+                                    onInit:onRowEditInit,
+                                    onSave:handleSave,
+                                    onCancel:onRowEditCancel,
+                                    onDelete:handleDelete,
+                                    isEditing: !!rowsEditing[rowData.keyString]
+                                })}
+                                bodyClassName="text-center" 
+                                
+                                style={{ maxWidth: '2rem' }} />
+                        </DataTable>
+                    </div>
                 </div>
             </div>
-        </div>
+       </PermissionGuard>
     );
 };
 
