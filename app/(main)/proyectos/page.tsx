@@ -52,9 +52,21 @@ const schemaActividad = Yup.object().shape({
     responsable_id: Yup.number().required('El responsable es obligatorio'),
     fecha_inicio: Yup.date().required('La fecha de inicio es obligatoria'),
     fecha_fin: Yup.date().required('La fecha de fin es obligatoria'),
-    persona_beneficiada: Yup.string().required('El campo persona beneficiada es obligatorio'),
+    persona_beneficiada: Yup.string()
+        .required('El campo persona beneficiada es obligatorio')
+        .test('es-json-valido', 'Formato inválido', (value) => {
+            try {
+                const obj = value ? JSON.parse(value) : {};
+                return obj && typeof obj === 'object';
+            } catch { return false; }
+        })
+        .test('valores-enteros-no-negativos', 'Los valores deben ser enteros no negativos', (value) => {
+            try {
+                const obj = value ? JSON.parse(value) : {};
+                return Object.values(obj).every((v:any) => Number.isInteger(v) && v >= 0);
+            } catch { return false; }
+        }),
     prioridad: Yup.string().required('La prioridad es obligatoria'),
-    //validar que el array este lleno y sea de tipo number
     autoridad_participante: Yup.array()
         .of(Yup.number())
         .min(1, 'Debe seleccionar al menos una autoridad participante')
@@ -71,7 +83,6 @@ const schemaActividad = Yup.object().shape({
     link_zoom: Yup.string().url('Debe ser una URL válida').nullable(),
     link_panelista: Yup.string().url('Debe ser una URL válida').nullable(),
     comentario: Yup.string().nullable(),
-    //documento es de tipo file y multiple
     documento: Yup.array().of(Yup.object().shape({
         name: Yup.string().required('El nombre del archivo es obligatorio'),
         size: Yup.number().required('El tamaño del archivo es obligatorio'),
@@ -91,7 +102,6 @@ const tiposBeneficiados = [
     { label: 'Hombre', value: 'Hombre' },
     { label: 'Mujer', value: 'Mujer' },
     { label: 'Otro', value: 'Otro' },
-    { label: 'No aplica', value: 'No aplica' }
 ];
 
 const prioridades = [
@@ -599,6 +609,13 @@ const ProyectoPage = () => {
                 fecha_copy_creativo: formularioActividad.fecha_copy_creativo ? formularioActividad.fecha_copy_creativo?.toISOString().slice(0, 10) : null,
                 fecha_inicio_difusion_banner: formularioActividad.fecha_inicio_difusion_banner ? formularioActividad.fecha_inicio_difusion_banner?.toISOString().slice(0, 10) : null,
                 fecha_fin_difusion_banner: formularioActividad.fecha_fin_difusion_banner ? formularioActividad.fecha_fin_difusion_banner?.toISOString().slice(0, 10) : null,
+                persona_beneficiada: (() => {
+                    const raw = formularioActividad.persona_beneficiada;
+                    try {
+                        // si ya es string, enviar como está, si es objeto, serializar
+                        return typeof raw === 'string' ? raw : JSON.stringify(raw || {});
+                    } catch { return JSON.stringify({}); }
+                })(),
                 link_drive: formularioActividad.link_drive || '',
                 link_registro: formularioActividad.link_registro || '',
                 link_zoom: formularioActividad.link_zoom || '',
@@ -651,6 +668,13 @@ const ProyectoPage = () => {
             fecha_copy_creativo: data.fecha_copy_creativo ? new Date(data.fecha_copy_creativo) : null,
             fecha_inicio_difusion_banner: data.fecha_inicio_difusion_banner ? new Date(data.fecha_inicio_difusion_banner) : null,
             fecha_fin_difusion_banner: data.fecha_fin_difusion_banner ? new Date(data.fecha_fin_difusion_banner) : null,
+            persona_beneficiada: (() => {
+                try {
+                    const raw = data.persona_beneficiada;
+                    if (!raw) return JSON.stringify({});
+                    return typeof raw === 'string' ? raw : JSON.stringify(raw);
+                } catch { return JSON.stringify({}); }
+            })(),
         }));
         
     
@@ -658,6 +682,11 @@ const ProyectoPage = () => {
     }
 
     const onAgregarActividad = () => {
+        const baseBenef: Record<string, number> = (tiposBeneficiados || []).reduce((acc: Record<string, number>, tb: any) => {
+            acc[tb.value] = 0;
+            return acc;
+        }, {} as Record<string, number>);
+
         setFormularioActividad({
             id: null,
             proyecto_id: null,
@@ -665,7 +694,8 @@ const ProyectoPage = () => {
             descripcion: '',
             fecha_inicio: null,
             fecha_fin: null,
-            estado: 'pendiente'
+            estado: 'pendiente',
+            persona_beneficiada: JSON.stringify(baseBenef)
         });
         setVisibleFormularioActividad(true);
     };
@@ -1278,7 +1308,7 @@ const ProyectoPage = () => {
 
     // Breadcrumb items
     const breadcrumbItems: MenuItem[] = [
-        { label: 'Proyectos y actividades', icon: 'pi pi-briefcase' },
+        { label: 'Gestioón de proyectos', icon: 'pi pi-briefcase' },
         { label: 'Proyectos', icon: 'pi pi-briefcase' }
     ];
     const breadcrumbHome: MenuItem = { icon: 'pi pi-home', command: () => window.location.href = '/' };

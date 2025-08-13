@@ -34,6 +34,15 @@ import {
     TipoProyecto,
 } from './catalogo';
 import { Persona, Usuario } from './persona';
+import { 
+    ReporteProyecto, 
+    ReporteTipoProyecto,
+    ActividadReporte, 
+    FiltrosReporte, 
+    DetalleProyecto, 
+    ActividadDetalle, 
+    TareaDetalle 
+} from './reporte';
 
 type ChildContainerProps = {
     children: ReactNode;
@@ -77,5 +86,12 @@ export type {
     TipoDocumento,
     TipoProyecto,
     Persona,
-    Usuario
+    Usuario,
+    ReporteProyecto,
+    ReporteTipoProyecto,
+    ActividadReporte,
+    FiltrosReporte,
+    DetalleProyecto,
+    ActividadDetalle,
+    TareaDetalle
 };

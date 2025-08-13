@@ -83,8 +83,7 @@ const AppMenu = () => {
          {
             label: 'Reportes',
             items: [
-                { label: 'Reporte de proyectos', icon: 'pi pi-fw pi-file', to: '/construccion', permissions: ['reportes.proyectos'] },
-                { label: 'Reporte de actividades', icon: 'pi pi-fw pi-file', to: '/construccion', permissions: ['reportes.actividades'] },
+                { label: 'Centro de Reportes', icon: 'pi pi-fw pi-chart-bar', to: '/reportes/index', permissions: ['reportes.ver'] },
             ],
             permissions: ['reportes']
         },

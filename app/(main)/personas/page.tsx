@@ -345,8 +345,11 @@ const PersonasPage = () => {
     
     // Custom templates
     const customHeader =(
-        <div className="flex justify-content-between align-items-center">
-            <h5 className="m-0">{formularioPersona?.id ? 'Actualizar información' : 'Nuevo registro'}</h5>
+        <div className="flex align-items-center gap-2 py-2">
+            <i className={formularioPersona?.id ? 'pi pi-user-edit text-xl text-primary-600' : 'pi pi-user-plus text-xl text-primary-600'}></i>
+            <h5 className="m-0 text-xl font-semibold text-primary-800">
+                {formularioPersona?.id ? 'Actualizar información' : 'Nuevo registro'}
+            </h5>
         </div>
     );
 
@@ -640,7 +643,7 @@ const PersonasPage = () => {
                         icon="pi pi-users"
                     />
                     {renderToolbar()}
-                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                    <div className="bg-white border border-gray-200 overflow-hidden border-round-xl shadow-2">
                         <DataTable
                             value={personasFiltradas}
                             paginator
@@ -696,9 +699,14 @@ const PersonasPage = () => {
                         modal={true}
                         dismissable={false}
                         className="w-full md:w-20rem lg:w-30rem"
+                        pt={{
+                            header: { className: 'border-bottom-1 surface-border' },
+                            content: { className: 'p-0' }
+                        }}
                         header={customHeader}>
                         <div className="flex flex-column h-full">
-                            <div className='flex flex-column justify-content-between gap-4'>
+                            <div className="p-4 overflow-y-auto" style={{ height: 'calc(100vh - 140px)' }}>
+                                <div className='flex flex-column justify-content-between gap-4'>
                                     <div className="flex flex-column gap-2">
                                         <label htmlFor="" className='font-medium'>Nombre <span className='text-red-600'>*</span></label>
                                         <InputText  
@@ -795,9 +803,9 @@ const PersonasPage = () => {
                                             </div>
                                         </>
                                     )}
+                                </div>
                             </div>
-                            <div className="mt-auto">
-                                <hr className="mb-3 mx-2 border-top-1 border-none surface-border" />
+                            <div className="mt-auto border-top-1 surface-border p-4">
                                 <div className='flex justify-content-between align-items-center gap-2'>
                                     <Button label="Cancelar" 
                                             icon="pi pi-times"

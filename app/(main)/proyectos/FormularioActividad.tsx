@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from "primereact/sidebar";
 import { Button } from "primereact/button";
 import { Dropdown } from "primereact/dropdown";
@@ -6,6 +6,7 @@ import { MultiSelect } from "primereact/multiselect";
 import { Calendar } from "primereact/calendar";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
+import { InputNumber } from 'primereact/inputnumber';
 
 type FormularioActividadProps = {
     visible: boolean;
@@ -53,7 +54,38 @@ const FormularioActividad = ({
             </h5>
         </div>
     );      
-   
+
+    // Estado local para manejar "persona_beneficiada" como objeto { [tipo]: numero }
+    const buildPersonaBeneficiada = () => {
+        const base: Record<string, number> = (tiposBeneficiados || []).reduce((acc: Record<string, number>, tb: any) => {
+            acc[tb.value] = 0;
+            return acc;
+        }, {} as Record<string, number>);
+        const raw = initialData?.persona_beneficiada;
+        if (raw) {
+            try {
+                const parsed: any = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                Object.keys(base).forEach((k) => {
+                    const val = parsed?.[k];
+                    if (Number.isInteger(val) && val >= 0) base[k] = val;
+                });
+            } catch (e) {
+                // Si no es JSON válido, mantener base por defecto
+            }
+        }
+        return base;
+    };
+
+    const [personaBeneficiada, setPersonaBeneficiada] = useState<Record<string, number>>(buildPersonaBeneficiada());
+
+    // Mantener sincronizado con initialData y asegurar que siempre haya un JSON en el payload
+    useEffect(() => {
+        const next = buildPersonaBeneficiada();
+        setPersonaBeneficiada(next);
+        setFieldValue('persona_beneficiada', JSON.stringify(next));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(initialData?.persona_beneficiada), JSON.stringify(tiposBeneficiados)]);
+
     return (
         <Sidebar 
             visible={visible} 
@@ -207,19 +239,32 @@ const FormularioActividad = ({
                                     {errors.beneficiario_id && <small className="p-error">{errors.beneficiario_id}</small>}
                                 </div>
 
-                                <div className="col-12 md:col-6 flex flex-column gap-2">
-                                    <label htmlFor="persona_beneficiada" className="font-medium">Persona beneficiada <span className="text-red-600">*</span></label>
-                                    <Dropdown
-                                        id="persona_beneficiada" 
-                                        name="persona_beneficiada"
-                                        value={initialData.persona_beneficiada} 
-                                        onChange={(e) => setFieldValue(e.target.name, e.value)} 
-                                        options={tiposBeneficiados}
-                                        optionLabel="label"
-                                        optionValue="value"
-                                        className={errors.persona_beneficiada ? 'p-invalid' : ''}
-                                        placeholder="Seleccione beneficiado"
-                                    />
+                                {/* Reemplazo del select por inputs separados por tipo */}
+                                <div className="col-12lex flex-column gap-2">
+                                    <label className="font-medium">Personas beneficiadas <span className="text-red-600">*</span></label>
+                                    <div className="grid gap-5">
+                                        {(tiposBeneficiados || []).map((tb: any) => (
+                                            <div className="col-4 sm:col-4 flex flex-column" key={tb.value}>
+                                                <label htmlFor={`pb-${tb.value}`} className="text-sm text-color-secondary">{tb.label}</label>
+                                                <InputNumber
+                                                    inputId={`pb-${tb.value}`}
+                                                    value={personaBeneficiada[tb.value] ?? 0}
+                                                    min={0}
+                                                    showButtons
+                                                    buttonLayout="horizontal"
+                                                    step={1}
+                                                    useGrouping={false}
+                                                    onValueChange={(e) => {
+                                                        const val = typeof e.value === 'number' && Number.isInteger(e.value) && e.value >= 0 ? e.value : 0;
+                                                        const updated = { ...personaBeneficiada, [tb.value]: val };
+                                                        setPersonaBeneficiada(updated);
+                                                        setFieldValue('persona_beneficiada', JSON.stringify(updated));
+                                                    }}
+                                                    className={errors.persona_beneficiada ? 'p-invalid' : ''}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
                                     {errors.persona_beneficiada && <small className="p-error">{errors.persona_beneficiada}</small>}
                                 </div>
                             </div>
@@ -499,7 +544,7 @@ const FormularioActividad = ({
             </div>
         </Sidebar>
     );
-};
+}
 
 
 export default FormularioActividad;
