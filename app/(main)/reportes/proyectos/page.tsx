@@ -221,6 +221,7 @@ export default function ReportesPage() {
         );  
     };
 
+    /*
     const resumenGeneral = () => {
         const totalProyectos = reporteData.length;
         const proyectosActivos = reporteData.filter(p => p.estatus === 'Activo').length;
@@ -258,7 +259,7 @@ export default function ReportesPage() {
                 </div>
             </div>
         );
-    };
+    };*/
 
     if (!hasPermission('reportes.proyectos')) {
         return (
