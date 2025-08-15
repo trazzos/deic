@@ -21,7 +21,8 @@ export default function ReportesIndexPage() {
             descripcion: 'Análisis detallado del progreso y resultados de todos los proyectos con filtros por fecha, tipo y departamento.',
             icon: 'pi pi-chart-bar',
             ruta: '/reportes/proyectos',
-            color: 'blue'
+            color: 'blue',
+            disponible: true,
         },
         {
             id: 'actividades',
