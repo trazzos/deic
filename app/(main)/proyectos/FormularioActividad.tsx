@@ -23,8 +23,6 @@ type FormularioActividadProps = {
     capacitadores?: any[];
     tiposBeneficiados?: any[];
     prioridades?: { label: string; value: string }[];
-    onUploadDocuments?: (files: any[], tipoDocumento: any) => Promise<void>;
-    onRemoveDocument?: (file: any) => Promise<void>;
 };
 
 const FormularioActividad = ({ 
@@ -42,8 +40,6 @@ const FormularioActividad = ({
     capacitadores,
     tiposBeneficiados,
     prioridades,
-    onUploadDocuments,
-    onRemoveDocument
  }: FormularioActividadProps) => {
    
     const customHeader = (
@@ -55,34 +51,51 @@ const FormularioActividad = ({
         </div>
     );      
 
-    // Estado local para manejar "persona_beneficiada" como objeto { [tipo]: numero }
-    const buildPersonaBeneficiada = () => {
+    // helpers
+    const toArrayFromMap = (mapObj: Record<string, number>) => {
+        return (tiposBeneficiados || []).map((tb: any) => ({ nombre: tb.value, total: mapObj[tb.value] ?? 0 }));
+    };
+
+    const toMapFromAny = (raw: any) => {
         const base: Record<string, number> = (tiposBeneficiados || []).reduce((acc: Record<string, number>, tb: any) => {
             acc[tb.value] = 0;
             return acc;
         }, {} as Record<string, number>);
-        const raw = initialData?.persona_beneficiada;
-        if (raw) {
-            try {
-                const parsed: any = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+        if (!raw) return base;
+
+        try {
+            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            if (Array.isArray(parsed)) {
+                parsed.forEach((item: any) => {
+                    if (item && typeof item === 'object' && typeof item.nombre === 'string') {
+                        const val = Number(item.total);
+                        if (Number.isInteger(val) && val >= 0 && Object.prototype.hasOwnProperty.call(base, item.nombre)) {
+                            base[item.nombre] = val;
+                        }
+                    }
+                });
+            } else if (parsed && typeof parsed === 'object') {
                 Object.keys(base).forEach((k) => {
                     const val = parsed?.[k];
                     if (Number.isInteger(val) && val >= 0) base[k] = val;
                 });
-            } catch (e) {
-                // Si no es JSON válido, mantener base por defecto
             }
+        } catch {
+            // ignore, keep base
         }
         return base;
     };
 
-    const [personaBeneficiada, setPersonaBeneficiada] = useState<Record<string, number>>(buildPersonaBeneficiada());
+    // Estado local como mapa para UI
+    const [personaBeneficiada, setPersonaBeneficiada] = useState<Record<string, number>>(() => toMapFromAny(initialData?.persona_beneficiada));
 
-    // Mantener sincronizado con initialData y asegurar que siempre haya un JSON en el payload
+    // Sync con initialData y actualizar al padre como array [{nombre,total}]
     useEffect(() => {
-        const next = buildPersonaBeneficiada();
-        setPersonaBeneficiada(next);
-        setFieldValue('persona_beneficiada', JSON.stringify(next));
+        const nextMap = toMapFromAny(initialData?.persona_beneficiada);
+        console.log(initialData?.persona_beneficiada);
+        setPersonaBeneficiada(nextMap);
+        setFieldValue('persona_beneficiada', toArrayFromMap(nextMap));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(initialData?.persona_beneficiada), JSON.stringify(tiposBeneficiados)]);
 
@@ -126,6 +139,7 @@ const FormularioActividad = ({
                                     <label htmlFor="tipo-actividad" className="font-medium">Tipo actividad <span className="text-red-600">*</span></label>
                                     <Dropdown 
                                         id="tipo-actividad" 
+                                        showClear
                                         name="tipo_actividad_id"
                                         value={initialData.tipo_actividad_id} 
                                         options={tiposActividad || []} 
@@ -133,7 +147,7 @@ const FormularioActividad = ({
                                         optionValue="id"
                                         onChange={(e) => setFieldValue(e.target.name, e.value)} 
                                         className={errors.tipo_actividad_id ? 'p-invalid' : ''}
-                                        placeholder="Seleccione un tipo"
+                                        placeholder="Seleccione una opción"
                                     />
                                     {errors.tipo_actividad_id && <small className="p-error">{errors.tipo_actividad_id}</small>}
                                 </div>
@@ -142,6 +156,7 @@ const FormularioActividad = ({
                                     <label htmlFor="prioridad" className="font-medium">Prioridad <span className="text-red-600">*</span></label>
                                     <Dropdown
                                         id="prioridad" 
+                                        showClear
                                         name="prioridad"
                                         value={initialData.prioridad} 
                                         options={prioridades}
@@ -149,7 +164,7 @@ const FormularioActividad = ({
                                         optionValue="value"
                                         onChange={(e) => setFieldValue(e.target.name, e.value)} 
                                         className={errors.prioridad ? 'p-invalid' : ''}
-                                        placeholder="Seleccione prioridad"
+                                        placeholder="Seleccione una opción"
                                     />
                                     {errors.prioridad && <small className="p-error">{errors.prioridad}</small>}
                                 </div>
@@ -168,6 +183,7 @@ const FormularioActividad = ({
                                     <label htmlFor="responsable" className="font-medium">Responsable <span className="text-red-600">*</span></label>
                                     <Dropdown 
                                         id="responsable" 
+                                        showClear
                                         name="responsable_id"
                                         value={initialData.responsable_id} 
                                         options={responsables || []} 
@@ -175,15 +191,16 @@ const FormularioActividad = ({
                                         optionValue="id"
                                         onChange={(e) => setFieldValue(e.target.name, e.value)} 
                                         className={errors.responsable_id ? 'p-invalid' : ''}
-                                        placeholder="Seleccione responsable"
+                                        placeholder="Seleccione una opción"
                                     />
                                     {errors.responsable_id && <small className="p-error">{errors.responsable_id}</small>}
                                 </div>
 
                                 <div className="col-12 md:col-4 flex flex-column gap-2">
-                                    <label htmlFor="capacitador" className="font-medium">Capacitador <span className="text-red-600">*</span></label>
+                                    <label htmlFor="capacitador" className="font-medium">Capacitador <span className="text-red-600"></span></label>
                                     <Dropdown 
                                         id="capacitador" 
+                                        showClear
                                         name="capacitador_id"
                                         value={initialData.capacitador_id} 
                                         options={capacitadores || []} 
@@ -191,13 +208,13 @@ const FormularioActividad = ({
                                         optionValue="id"
                                         onChange={(e) => setFieldValue(e.target.name, e.value)} 
                                         className={errors.capacitador_id ? 'p-invalid' : ''}
-                                        placeholder="Seleccione capacitador"
+                                        placeholder="Seleccione una opción"
                                     />
                                     {errors.capacitador_id && <small className="p-error">{errors.capacitador_id}</small>}
                                 </div>
 
                                 <div className="col-12 md:col-4 flex flex-column gap-2">
-                                    <label htmlFor="autoridad" className="font-medium">Autoridades <span className="text-red-600">*</span></label>
+                                    <label htmlFor="autoridad" className="font-medium">Autoridades <span className="text-red-600"></span></label>
                                     <MultiSelect
                                         id="autoridad" 
                                         showClear
@@ -208,7 +225,7 @@ const FormularioActividad = ({
                                         optionLabel="nombre"
                                         optionValue="id"
                                         className={errors.autoridad_participante ? 'p-invalid' : ''}
-                                        placeholder="Seleccione autoridades"
+                                        placeholder="Seleccione una opción"
                                     />
                                     {errors.autoridad_participante && <small className="p-error">{errors.autoridad_participante}</small>}
                                 </div>
@@ -239,26 +256,25 @@ const FormularioActividad = ({
                                     {errors.beneficiario_id && <small className="p-error">{errors.beneficiario_id}</small>}
                                 </div>
 
-                                {/* Reemplazo del select por inputs separados por tipo */}
-                                <div className="col-12lex flex-column gap-2">
-                                    <label className="font-medium">Personas beneficiadas <span className="text-red-600">*</span></label>
-                                    <div className="grid gap-5">
+                                {/* Inputs por tipo de persona beneficiada */}
+                                <div className="col-12 flex flex-column gap-2">
+                                    <label className="font-medium">Numero de beneficiarios por tipo <span className="text-red-600">*</span></label>
+                                    <div className="grid gap-2 p-fluid">
                                         {(tiposBeneficiados || []).map((tb: any) => (
-                                            <div className="col-4 sm:col-4 flex flex-column" key={tb.value}>
+                                            <div className="col flex flex-column gap-1" key={tb.value}>
                                                 <label htmlFor={`pb-${tb.value}`} className="text-sm text-color-secondary">{tb.label}</label>
                                                 <InputNumber
                                                     inputId={`pb-${tb.value}`}
                                                     value={personaBeneficiada[tb.value] ?? 0}
                                                     min={0}
                                                     showButtons
-                                                    buttonLayout="horizontal"
                                                     step={1}
                                                     useGrouping={false}
                                                     onValueChange={(e) => {
                                                         const val = typeof e.value === 'number' && Number.isInteger(e.value) && e.value >= 0 ? e.value : 0;
-                                                        const updated = { ...personaBeneficiada, [tb.value]: val };
-                                                        setPersonaBeneficiada(updated);
-                                                        setFieldValue('persona_beneficiada', JSON.stringify(updated));
+                                                        const updatedMap = { ...personaBeneficiada, [tb.value]: val };
+                                                        setPersonaBeneficiada(updatedMap);
+                                                        setFieldValue('persona_beneficiada', toArrayFromMap(updatedMap));
                                                     }}
                                                     className={errors.persona_beneficiada ? 'p-invalid' : ''}
                                                 />

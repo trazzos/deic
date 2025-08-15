@@ -44,6 +44,10 @@ import {
     TareaDetalle 
 } from './reporte';
 
+import {
+    Proyecto
+} from './proyecto';
+
 type ChildContainerProps = {
     children: ReactNode;
 };
@@ -93,5 +97,6 @@ export type {
     FiltrosReporte,
     DetalleProyecto,
     ActividadDetalle,
-    TareaDetalle
+    TareaDetalle,
+    Proyecto
 };

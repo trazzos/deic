@@ -14,63 +14,49 @@ import { Tag } from 'primereact/tag';
 import { DataScroller } from 'primereact/datascroller';
 import { BreadCrumb } from "primereact/breadcrumb";
 import { MenuItem } from "primereact/menuitem";
+import { Badge } from 'primereact/badge';
 
-import { 
-    DepartamentoService, 
-    TipoProyectoService,
-    TipoDocumentoService,
-    ProyectoService,
-    DependenciaProyectoService,
-    TipoActividadService,
-    PersonaService,
-    BeneficiarioService,
-    AutoridadService,
-    CapacitadorService,
-} from '@/src/services';
-
-import { useNotification } from '@/layout/context/notificationContext';
+// Components
 import FormularioActividad  from './FormularioActividad'
 import FormularioProyecto from './FormularioProyecto';
 import EmptyStateProject from './components/EmptyStateProject';
 import EmptyStateActivity from './components/EmptyStateActivity';
 import RepositorioDocumentos from './components/RepositorioDocumentos';
 
-interface Proyecto {
-    uuid:string|null,
-    tipoProyecto:number|null,
-    departamento:number|null,
-    nombre:string,
-    descripcion:string
-}
+import { 
+    ProyectoService,
+    DependenciaProyectoService,
+} from '@/src/services';
+import type { Proyecto } from '@/types';
+import { useNotification } from '@/layout/context/notificationContext';
+import { useFormErrorHandler } from '@/src/utils/errorUtils';
 
 const schemaActividad = Yup.object().shape({
     uuid: Yup.string().nullable(),
     nombre: Yup.string().required('El nombre es obligatorio'),
     tipo_actividad_id: Yup.number().required('El tipo de actividad es obligatorio'),
-    capacitador_id: Yup.number().required('El capacitador es obligatorio'),
+    capacitador_id: Yup.number().nullable(),
     beneficiario_id: Yup.number().required('El beneficiario es obligatorio'),
     responsable_id: Yup.number().required('El responsable es obligatorio'),
     fecha_inicio: Yup.date().required('La fecha de inicio es obligatoria'),
     fecha_fin: Yup.date().required('La fecha de fin es obligatoria'),
-    persona_beneficiada: Yup.string()
+    persona_beneficiada: Yup.array()
+        .of(
+            Yup.object({
+                nombre: Yup.string().oneOf(['Hombre','Mujer','Otro']).required(),
+                total: Yup.number().integer('Debe ser un entero').min(0, 'No puede ser negativo').required()
+            })
+        )
         .required('El campo persona beneficiada es obligatorio')
-        .test('es-json-valido', 'Formato inválido', (value) => {
-            try {
-                const obj = value ? JSON.parse(value) : {};
-                return obj && typeof obj === 'object';
-            } catch { return false; }
-        })
-        .test('valores-enteros-no-negativos', 'Los valores deben ser enteros no negativos', (value) => {
-            try {
-                const obj = value ? JSON.parse(value) : {};
-                return Object.values(obj).every((v:any) => Number.isInteger(v) && v >= 0);
-            } catch { return false; }
+        .test('contiene-tres-tipos', 'Debe incluir Hombre, Mujer y Otro', (arr:any) => {
+            if (!Array.isArray(arr)) return false;
+            const nombres = arr.map((i:any) => i?.nombre);
+            return ['Hombre','Mujer','Otro'].every(t => nombres.includes(t));
         }),
     prioridad: Yup.string().required('La prioridad es obligatoria'),
     autoridad_participante: Yup.array()
         .of(Yup.number())
-        .min(1, 'Debe seleccionar al menos una autoridad participante')
-        .required('El campo autoridad participante es obligatorio'),
+        .nullable(),
     link_drive: Yup.string().url('Debe ser una URL válida').nullable(),
     fecha_solicitud_constancia: Yup.date().nullable(),
     fecha_envio_constancia: Yup.date().nullable(),
@@ -109,6 +95,7 @@ const prioridades = [
     { label: 'Media', value: 'Media' },
     { label: 'Baja', value: 'Baja' }
 ];
+
 const ProyectoPage = () => {
 
     const [proyectos, setProyectos] = useState<any[]>([]);
@@ -119,7 +106,6 @@ const ProyectoPage = () => {
     const [loadingGuardar, setLoadingGuardar] = useState(false);
     const [loadingGuardarActividad, setLoadingGuardarActividad] = useState(false);
     const [visibleFormulario, setVisibleFormulario] = useState(false);
-    const [filters, setFilters] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [formularioActividad, setFormularioActividad] = useState<any>({});
     const { showError, showSuccess } = useNotification();
@@ -167,6 +153,9 @@ const ProyectoPage = () => {
     // tareasPorProyecto: { [proyectoUuid]: { [actividadUuid]: tarea[] } }
     const [actividadesPorProyecto, setActividadesPorProyecto] = useState<{ [key: string]: any[] }>({});
     const [tareasPorProyecto, setTareasPorProyecto] = useState<{ [key: string]: { [key: string]: any[] } }>({});
+    
+    // Seguimiento de proyectos que han sido cargados con actividades para cálculo de avance
+    const [proyectosCargados, setProyectosCargados] = useState<Set<string>>(new Set());
     
     // Tareas del proyecto activo (para mantener compatibilidad con el código existente)
     const [tareasPorActividad, setTareasPorActividad] = useState<any>({});
@@ -233,21 +222,30 @@ const ProyectoPage = () => {
         const proyectoParaCalcular = proyectoUuid || proyectoActivo?.uuid;
         
         if (!proyectoParaCalcular) return 0;
-        
-        // Si el proyecto tiene porcentaje_avance del backend, usarlo para proyectos no activos
-        if (proyectoUuid && proyectoUuid !== proyectoActivo?.uuid) {
+
+        // Si tenemos actividades en caché para este proyecto, usarlas para el cálculo
+        const actividadesDelProyecto = actividadesPorProyecto[proyectoParaCalcular] || 
+                                     (proyectoParaCalcular === proyectoActivo?.uuid ? actividades : []);
+
+        // Si el proyecto ha sido cargado previamente y tenemos actividades en caché, usar cálculo basado en actividades
+        if (proyectosCargados.has(proyectoParaCalcular) && actividadesDelProyecto.length > 0) {
+            const actividadesCompletadas = actividadesDelProyecto.filter((actividad: any) => 
+                isActividadCompletada(actividad.uuid, proyectoParaCalcular)
+            ).length;
+            
+            return Math.round((actividadesCompletadas / actividadesDelProyecto.length) * 100);
+        }
+
+        // Para proyectos no activos que no han sido cargados, usar porcentaje del backend
+        if (proyectoUuid && proyectoUuid !== proyectoActivo?.uuid && !proyectosCargados.has(proyectoParaCalcular)) {
             const proyecto = proyectos.find(p => p.uuid === proyectoUuid);
             if (proyecto && typeof proyecto.porcentaje_avance === 'number') {
                 return proyecto.porcentaje_avance;
             }
         }
-        
-        // Para el proyecto activo, calcular en tiempo real basado en actividades cargadas
-        const actividadesDelProyecto = actividadesPorProyecto[proyectoParaCalcular] || 
-                                     (proyectoParaCalcular === proyectoActivo?.uuid ? actividades : []);
-        
+
+        // Si no hay actividades cargadas, usar el valor del backend si está disponible
         if (!actividadesDelProyecto || actividadesDelProyecto.length === 0) {
-            // Si no hay actividades cargadas, usar el valor del backend si está disponible
             const proyecto = proyectos.find(p => p.uuid === proyectoParaCalcular);
             if (proyecto && typeof proyecto.porcentaje_avance === 'number') {
                 return proyecto.porcentaje_avance;
@@ -255,6 +253,7 @@ const ProyectoPage = () => {
             return 0;
         }
         
+        // Cálculo basado en actividades para el proyecto activo
         const actividadesCompletadas = actividadesDelProyecto.filter((actividad: any) => 
             isActividadCompletada(actividad.uuid, proyectoParaCalcular)
         ).length;
@@ -268,6 +267,13 @@ const ProyectoPage = () => {
             ...prev,
             [proyectoUuid]: nuevasActividades
         }));
+        
+        // Marcar el proyecto como cargado para permitir cálculo de avance con caché
+        setProyectosCargados(prev => {
+            const newSet = new Set(prev);
+            newSet.add(proyectoUuid);
+            return newSet;
+        });
     };
 
     const updateTareasCache = (proyectoUuid: string, actividadUuid: string, nuevasTareas: any[]) => {
@@ -511,6 +517,7 @@ const ProyectoPage = () => {
         setFormularioErrors({});
         setVisibleFormulario(false);
         setProyectoActivo({});
+        // No resetear proyectosCargados aquí para mantener el caché de avance
     };
 
     const onEditProyecto = (e:any) => {
@@ -589,6 +596,7 @@ const ProyectoPage = () => {
     }
 
     // handlers actividades
+    const handleActividadesError = useFormErrorHandler(setFormularioActividadErrors, showError);
     const handleSaveDataActividad = async () => {   
         
         setLoadingGuardarActividad(true);
@@ -609,13 +617,19 @@ const ProyectoPage = () => {
                 fecha_copy_creativo: formularioActividad.fecha_copy_creativo ? formularioActividad.fecha_copy_creativo?.toISOString().slice(0, 10) : null,
                 fecha_inicio_difusion_banner: formularioActividad.fecha_inicio_difusion_banner ? formularioActividad.fecha_inicio_difusion_banner?.toISOString().slice(0, 10) : null,
                 fecha_fin_difusion_banner: formularioActividad.fecha_fin_difusion_banner ? formularioActividad.fecha_fin_difusion_banner?.toISOString().slice(0, 10) : null,
-                persona_beneficiada: (() => {
-                    const raw = formularioActividad.persona_beneficiada;
-                    try {
-                        // si ya es string, enviar como está, si es objeto, serializar
-                        return typeof raw === 'string' ? raw : JSON.stringify(raw || {});
-                    } catch { return JSON.stringify({}); }
-                })(),
+                persona_beneficiada: Array.isArray(formularioActividad.persona_beneficiada)
+                    ? formularioActividad.persona_beneficiada
+                    : ((): any[] => {
+                        try {
+                            const raw = formularioActividad.persona_beneficiada;
+                            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                            if (Array.isArray(parsed)) return parsed;
+                            if (parsed && typeof parsed === 'object') {
+                                return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: Number(parsed[k]) || 0 }));
+                            }
+                        } catch {}
+                        return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: 0 }));
+                    })(),
                 link_drive: formularioActividad.link_drive || '',
                 link_registro: formularioActividad.link_registro || '',
                 link_zoom: formularioActividad.link_zoom || '',
@@ -634,6 +648,7 @@ const ProyectoPage = () => {
             showSuccess('El registro se ha guardado correctamente');
 
         } catch (err: any) {
+            // Si la validación falla, Yup lanza un error con la propiedad 'inner' que contiene los errores individuales
             if (err.inner) {
                 const errors: { [key: string]: string } = {};
                 err.inner.forEach((validationError: any) => {
@@ -642,8 +657,9 @@ const ProyectoPage = () => {
                     }
                 });
                 setFormularioActividadErrors(errors);
-            } else 
-                showError('Ha ocurrido un error, intente nuevamente');
+            } else {
+               handleActividadesError(err);
+            }
         } finally {
             setLoadingGuardarActividad(false);
         };
@@ -655,10 +671,9 @@ const ProyectoPage = () => {
 
         setFormularioActividadErrors({});
         setFormularioActividad({});
-        
         setFormularioActividad((_prev:any) => ({
             ...data,
-            autoridad_participante: data.autoridad_participante.map((item:string) => parseInt(item)) || [],
+            autoridad_participante: Array.isArray(data.autoridad_participante) ?  data.autoridad_participante.map((item:string) => parseInt(item)) : [],
             fecha_inicio: data.fecha_inicio ? new Date(data.fecha_inicio) : null,
             fecha_fin: data.fecha_fin ? new Date(data.fecha_fin) : null,
             fecha_solicitud_constancia: data.fecha_solicitud_constancia ? new Date(data.fecha_solicitud_constancia) : null,
@@ -669,11 +684,16 @@ const ProyectoPage = () => {
             fecha_inicio_difusion_banner: data.fecha_inicio_difusion_banner ? new Date(data.fecha_inicio_difusion_banner) : null,
             fecha_fin_difusion_banner: data.fecha_fin_difusion_banner ? new Date(data.fecha_fin_difusion_banner) : null,
             persona_beneficiada: (() => {
+                const raw = data.persona_beneficiada;
                 try {
-                    const raw = data.persona_beneficiada;
-                    if (!raw) return JSON.stringify({});
-                    return typeof raw === 'string' ? raw : JSON.stringify(raw);
-                } catch { return JSON.stringify({}); }
+                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    if (Array.isArray(parsed)) return parsed;
+                    if (parsed && typeof parsed === 'object') {
+                        return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: Number(parsed[k]) || 0 }));
+                    }
+                } catch {
+                    return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: 0 }));
+                }
             })(),
         }));
         
@@ -682,11 +702,6 @@ const ProyectoPage = () => {
     }
 
     const onAgregarActividad = () => {
-        const baseBenef: Record<string, number> = (tiposBeneficiados || []).reduce((acc: Record<string, number>, tb: any) => {
-            acc[tb.value] = 0;
-            return acc;
-        }, {} as Record<string, number>);
-
         setFormularioActividad({
             id: null,
             proyecto_id: null,
@@ -695,7 +710,7 @@ const ProyectoPage = () => {
             fecha_inicio: null,
             fecha_fin: null,
             estado: 'pendiente',
-            persona_beneficiada: JSON.stringify(baseBenef)
+            persona_beneficiada: ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: 0 }))
         });
         setVisibleFormularioActividad(true);
     };
@@ -1308,7 +1323,7 @@ const ProyectoPage = () => {
 
     // Breadcrumb items
     const breadcrumbItems: MenuItem[] = [
-        { label: 'Gestioón de proyectos', icon: 'pi pi-briefcase' },
+        { label: 'Gestión de proyectos', icon: 'pi pi-briefcase' },
         { label: 'Proyectos', icon: 'pi pi-briefcase' }
     ];
     const breadcrumbHome: MenuItem = { icon: 'pi pi-home', command: () => window.location.href = '/' };
@@ -1630,6 +1645,21 @@ const ProyectoPage = () => {
                                                     <span className="font-medium">{actividadSeleccionada.beneficiario_nombre}</span>
                                                 </div>
                                             </div>
+                                            {(actividadSeleccionada.persona_beneficiada && Array.isArray(actividadSeleccionada.persona_beneficiada)) && 
+                                                (
+                                                    <div className="flex flex-column gap-2 py-1 ml-2">
+                                                        <span className="text-sm text-gray-600 dark:text-gray-400 mt-2">Número de beneficiarios por tipo</span>
+                                                        <div className="flex flex-auto flex-wrap gap-2 ">
+                                                            {actividadSeleccionada.persona_beneficiada.map((persona:any, index: number) => (
+                                                            <div className="flex align-items-center gap-2">
+                                                                <span className="font-medium text-gray-600 dark:text-gray-400">{persona.nombre === 'Mujer' ? `Mujer(es)` : `${persona.nombre}(s)` }</span>
+                                                                <Badge  value={persona.total} severity="info"></Badge>
+                                                            </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                   
+                                                )}
                                         </div>
                                     </div>
                                 </div>
@@ -1641,12 +1671,6 @@ const ProyectoPage = () => {
                                         <div className="col-12 mb-3">
                                             <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tipo de actividad</span>
                                             <span className="font-medium">{actividadSeleccionada.tipo_actividad_nombre}</span>
-                                        </div>
-                                        <div className="col-12 mb-3">
-                                            <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                                                <i className="pi pi-user text-gray-600 mr-2"></i>Persona beneficiada
-                                            </span>
-                                            <span className="font-medium">{actividadSeleccionada.persona_beneficiada}</span>
                                         </div>
                                         <div className="col-12 mb-3">
                                             <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prioridad</span>
@@ -1712,7 +1736,7 @@ const ProyectoPage = () => {
                                             <span className="font-medium">{actividadSeleccionada.fecha_fin_difusion_banner ? new Date(actividadSeleccionada.fecha_fin_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
                                         </div>
                                     </div>
-                                </div>
+ </div>
 
                                 {/* Links Section */}
                                 <div className="mb-3">
