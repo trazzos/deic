@@ -133,7 +133,7 @@ const CapacitadorPage = () => {
         }
 
         fetchCapacitadores();  
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 

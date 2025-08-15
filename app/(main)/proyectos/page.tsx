@@ -1651,7 +1651,7 @@ const ProyectoPage = () => {
                                                         <span className="text-sm text-gray-600 dark:text-gray-400 mt-2">Número de beneficiarios por tipo</span>
                                                         <div className="flex flex-auto flex-wrap gap-2 ">
                                                             {actividadSeleccionada.persona_beneficiada.map((persona:any, index: number) => (
-                                                            <div className="flex align-items-center gap-2">
+                                                            <div className="flex align-items-center gap-2" key={`${actividadSeleccionada.uuid}-persona-${index}`}>
                                                                 <span className="font-medium text-gray-600 dark:text-gray-400">{persona.nombre === 'Mujer' ? `Mujer(es)` : `${persona.nombre}(s)` }</span>
                                                                 <Badge  value={persona.total} severity="info"></Badge>
                                                             </div>

@@ -128,7 +128,7 @@ const TipoDocumentoPage = () => {
         }
 
         fetchTiposDocumento();
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 

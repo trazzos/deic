@@ -133,7 +133,7 @@ const DepartamentoPage = () => {
         };
 
         fetchDepartamentos();
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 

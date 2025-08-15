@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Sidebar } from 'primereact/sidebar';
 import { Button } from 'primereact/button';
 import { FileUpload } from 'primereact/fileupload';
@@ -7,10 +7,8 @@ import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Tag } from 'primereact/tag';
 import { ProgressSpinner } from 'primereact/progressspinner';
-import { TipoDocumentoService } from '@/src/services/catalogos/tipoDocumento';
 import { ProyectoService } from '@/src/services';
 import { useNotification } from '@/layout/context/notificationContext';
-import { error } from 'node:console';
 
 interface RepositorioDocumentosProps {
     visible: boolean;
@@ -38,13 +36,8 @@ const RepositorioDocumentos = ({
     const fileUploadRef = useRef<any>(null);
     const { showError, showSuccess } = useNotification();
 
-    useEffect(() => {
-        if (visible) {
-            loadDocumentos();
-        }
-    }, [visible]);
 
-    const loadDocumentos = async () => {
+    const loadDocumentos = useCallback(async () => {
         try {
            
             const response = await ProyectoService.getListaDocumentosPorActividadUuid(
@@ -56,7 +49,13 @@ const RepositorioDocumentos = ({
         } catch (responseError:any) {
             showError('Ha ocurrido un error', responseError.message);
         }
-    };
+    }, [actividad.proyecto_uuid, actividad.uuid, showError]);
+
+    useEffect(() => {
+        if (visible) {
+            loadDocumentos();
+        }
+    }, [visible, loadDocumentos]);
 
     const handleUpload = async (event: any) => {
         if (!selectedTipo) {

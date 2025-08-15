@@ -180,7 +180,7 @@ const PersonasPage = () => {
             .finally(() => {
                 setLoading(false);
             });
-    }, []);
+    }, [showError]);
 
     const handleFormularioChange = (e: any) => {
 

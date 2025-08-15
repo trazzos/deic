@@ -174,33 +174,6 @@ export default function DashboardEjecutivo() {
 				</div>
 			</div>
 
-			{/* Top responsables */}
-			<div className="col-12 xl:col-6">
-				<div className="card border-round-xl shadow-2 bg-white mb-0">
-					<div className="flex align-items-center gap-3 mb-3">
-						<i className="pi pi-users text-2xl text-violet-500" />
-						<span className="text-lg font-semibold text-violet-700">Top 10 responsables</span>
-					</div>
-					<ul className="list-none p-0 m-0">
-						{responsables.map((r, idx) => (
-							<li key={r.nombre} className="flex align-items-center gap-3 mb-2">
-								<span className="text-900 font-bold" style={{ width: 24 }}>
-									{idx + 1}
-								</span>
-								<Avatar image={r.avatar} shape="circle" size="large" />
-								<span className="flex-1 text-900 font-medium">{r.nombre}</span>
-								<ProgressBar
-									value={Math.round((r.actividades / responsables[0].actividades) * 100)}
-									showValue={false}
-									style={{ width: 80, height: 10 }}
-									className="mx-2"
-								/>
-								<span className="text-700 font-semibold">{r.actividades} act.</span>
-							</li>
-						))}
-					</ul>
-				</div>
-			</div>
 
 			{/* Proyectos prioritarios */}
 			<div className="col-12 xl:col-6">

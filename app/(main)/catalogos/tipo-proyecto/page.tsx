@@ -130,7 +130,7 @@ const TipoProyectoPage = () => {
 
         fetchTipoProyectos();
 
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 

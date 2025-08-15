@@ -131,7 +131,7 @@ const TipoActividadPage = () => {
             }
         }
         fetchTiposActividad(); 
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 

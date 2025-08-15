@@ -133,7 +133,7 @@ const BeneficiarioPage = () => {
         }
 
         fetchBeneficiarioes();
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 

@@ -121,7 +121,7 @@ const AutoridadPage = () => {
         };
 
         fetchAutoridades();
-    }, []);
+    }, [showError]);
 
     const initFilters = () => {
 
