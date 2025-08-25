@@ -29,9 +29,9 @@ import { generateUUID } from '@/src/utils'
 const DepartamentoPage = () => {
 
     const { isSuperAdmin, canUpdate, canDelete, canCreate } = usePermissions();
-    const accessCreate = isSuperAdmin || canCreate('catalogos.departamentos');
-    const accessEdit = isSuperAdmin || canUpdate('catalogos.departamentos');
-    const accessDelete = isSuperAdmin || canDelete('catalogos.departamentos');
+    const accessCreate = isSuperAdmin || canCreate('catalogos.departamentos.agregar');
+    const accessEdit = isSuperAdmin || canUpdate('catalogos.departamentos.editar');
+    const accessDelete = isSuperAdmin || canDelete('catalogos.departamentos.eliminar');
 
     const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
     const [loading, setLoading] = useState(true);
@@ -443,7 +443,7 @@ const DepartamentoPage = () => {
                 <div className="col-12">
                     <CustomBreadcrumb
                             items={breadcrumbItems}
-                            theme="blue"
+                            theme="green"
                             title="Catálogo de Departamentos"
                             description="Administra el catálogo de departamentos"
                             icon="pi pi-th-large"

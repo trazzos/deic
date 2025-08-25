@@ -22,6 +22,7 @@ import FormularioProyecto from './FormularioProyecto';
 import EmptyStateProject from './components/EmptyStateProject';
 import EmptyStateActivity from './components/EmptyStateActivity';
 import RepositorioDocumentos from './components/RepositorioDocumentos';
+import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 
 import { 
     ProyectoService,
@@ -1331,36 +1332,15 @@ const ProyectoPage = () => {
     return (
         <div className="grid">
           <div className="col-12">
-            <div className="mb-4 p-4 border-round-lg bg-gradient-to-r from-purple-50 to-violet-50 border-1 border-purple-100 shadow-2">
-              <style>{`
-                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
-                  color: #6b21a8 !important;
-                  text-decoration: none;
-                }
-                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
-                  color: #7c3aed !important;
-                }
-                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-separator {
-                  color: #64748b !important;
-                }
-                .custom-breadcrumb-proyectos .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
-                  color: #8b5cf6 !important;
-                }
-              `}</style>
-              <BreadCrumb 
-                model={breadcrumbItems} 
-                home={breadcrumbHome}
-                className="custom-breadcrumb-proyectos bg-transparent border-none p-0"
-              />
-              <div className="mt-3">
-                <h5 className="font-bold text-purple-800 m-0 flex align-items-center gap-2">
-                  <i className="pi pi-briefcase text-purple-600"></i>
-                  Gestión de Proyectos
-                </h5>
-                <p className="text-sm text-purple-600 m-0 mt-1">Administra y supervisa todos los proyectos activos</p>
-              </div>
-            </div>
+            <CustomBreadcrumb
+                items={breadcrumbItems}
+                theme="green"
+                title="Gestión de Proyectos"
+                description="Administra y supervisa todos los proyectos activos"
+                icon="pi pi-briefcase"
+            />
           </div>
+           
           {proyectos.length === 0 && !loading ? (
             <EmptyStateProject onAddProject={onAgregar} />
           ) : (

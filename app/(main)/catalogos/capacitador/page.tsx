@@ -447,12 +447,12 @@ const CapacitadorPage = () => {
                 <div className="col-12">
                     <CustomBreadcrumb
                         items={breadcrumbItems}
-                        theme="blue"
+                        theme="green"
                         title="Catálogo de Capacitadores"
                         description="Administra el catálogo de capacitadores"
                         icon="pi pi-th-large"
                     />
-                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2">
                         <DataTable
                             value={capacitadores}
                             paginator

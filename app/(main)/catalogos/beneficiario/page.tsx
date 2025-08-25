@@ -447,7 +447,7 @@ const BeneficiarioPage = () => {
                 <div className="col-12">
                     <CustomBreadcrumb
                         items={breadcrumbItems}
-                        theme="blue"
+                        theme="green"
                         title="Catálogo de Beneficiarios"
                         description="Administra el catálogo de beneficiarios"
                         icon="pi pi-th-large"

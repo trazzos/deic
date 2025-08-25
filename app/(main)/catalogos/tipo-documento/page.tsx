@@ -439,7 +439,7 @@ const TipoDocumentoPage = () => {
                     <div className="col-12">
                         <CustomBreadcrumb
                                 items={breadcrumbItems}
-                                theme="blue"
+                                theme="green"
                                 title="Catálogo de Tipos de documento"
                                 description="Administra el catálogo de tipos de documento"
                                 icon="pi pi-th-large"

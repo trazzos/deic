@@ -443,7 +443,7 @@ const TipoProyectoPage = () => {
                 <div className="col-12">
                     <CustomBreadcrumb
                             items={breadcrumbItems}
-                            theme="blue"
+                            theme="green"
                             title="Catálogo de Tipos de proyecto"
                             description="Administra el catálogo de tipos de proyecto"
                             icon="pi pi-th-large"

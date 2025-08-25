@@ -7,7 +7,6 @@ import { TreeTable } from "primereact/treetable";
 import { Column } from "primereact/column";
 import { TreeNode } from "primereact/treenode";
 import { confirmPopup } from "primereact/confirmpopup";
-import { BreadCrumb } from "primereact/breadcrumb";
 import { MenuItem } from "primereact/menuitem";
 
 import type { PermisoNode, Role } from '@/types/role';
@@ -18,6 +17,7 @@ import { RoleService } from '@/src/services/catalogos/role';
 // componentes
 import { PermissionGuard } from '@/src/components/PermissionGuard';
 import AccessDenied from "@/src/components/AccessDenied";
+import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 // hooks
 import { usePermissions } from '@/src/hooks/usePermissions';
 
@@ -327,35 +327,14 @@ export default function RolesPage() {
 	return (
 		<div className="grid">
 			<div className="col-12 mx-auto">
-				<div className="mb-4 p-4 border-round-lg bg-gradient-to-r from-blue-50 to-indigo-50 border-1 border-blue-100 shadow-1">
-					<style>{`
-						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link {
-							color: #1e40af !important;
-							text-decoration: none;
-						}
-						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-link:hover {
-							color: #1d4ed8 !important;
-						}
-						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-separator {
-							color: #64748b !important;
-						}
-						.custom-breadcrumb .p-breadcrumb-list .p-breadcrumb-item .p-breadcrumb-item-icon {
-							color: #3b82f6 !important;
-						}
-					`}</style>
-					<BreadCrumb 
-						model={breadcrumbItems} 
-						home={breadcrumbHome}
-						className="custom-breadcrumb bg-transparent border-none p-0"
-					/>
-					<div className="mt-3">
-						<h5 className="font-bold text-blue-800 m-0 flex align-items-center gap-2">
-							<i className="pi pi-shield text-blue-600"></i>
-							Gestión de Roles
-						</h5>
-						<p className="text-sm text-blue-600 m-0 mt-1">Administra los roles y permisos del sistema</p>
-					</div>
-				</div>
+				 <CustomBreadcrumb
+					items={breadcrumbItems}
+					theme="green"
+					title="Gestión de Roles"
+					description="Administra los roles y permisos del sistema<"
+					icon="pi pi-shield"
+				/>
+
 				<div className="w-full max-w-2xl flex flex-column gap-4">
 					<PermissionGuard resource="gestion_cuentas.roles" action="agregar">
 						<div className="flex align-items-center justify-content-end mb-2">
