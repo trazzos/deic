@@ -10,6 +10,7 @@ export function middleware(request: NextRequest) {
         nextUrl.pathname.startsWith('/_next') ||
         nextUrl.pathname.startsWith('/favicon.ico') ||
         nextUrl.pathname.startsWith('/themes') ||
+        nextUrl.pathname.startsWith('/layout') ||
         nextUrl.pathname.startsWith('/assets') // Permite el acceso a la ruta CSRF de NextAuth
     ) {
         return NextResponse.next();
@@ -40,6 +41,6 @@ export function middleware(request: NextRequest) {
 // Configura los matchers para las rutas protegidas
 export const config = {
     matcher: [
-        '/((?!_next|themes|assets|favicon.ico).*)',
+        '/((?!_next|themes|assets|layout|favicon.ico).*)',
     ],
 }

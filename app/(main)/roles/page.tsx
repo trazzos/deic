@@ -322,8 +322,7 @@ export default function RolesPage() {
 		{ label: 'Gestión de cuentas', icon: 'pi pi-users' },
 		{ label: 'Roles de usuario', icon: 'pi pi-shield' }
 	];
-	const breadcrumbHome: MenuItem = { icon: 'pi pi-home', command: () => window.location.href = '/' };
-
+	
 	return (
 		<div className="grid">
 			<div className="col-12 mx-auto">

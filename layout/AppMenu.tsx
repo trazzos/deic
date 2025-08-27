@@ -54,8 +54,7 @@ const AppMenu = () => {
                 { label: 'Autoridades', icon: 'pi pi-fw pi-th-large', to: '/catalogos/autoridad', permissions: ['catalogos.autoridades'] },
                 { label: 'Beneficiarios', icon: 'pi pi-fw pi-th-large', to: '/catalogos/beneficiario', permissions: ['catalogos.beneficiarios'] },
                 { label: 'Capacitadores', icon: 'pi pi-fw pi-th-large', to: '/catalogos/capacitador', permissions: ['catalogos.capacitadores'] },
-                { label: 'Departamentos', icon: 'pi pi-fw pi-th-large', to: '/catalogos/departamento', permissions: ['catalogos.departamentos'] },
-                { label: 'Organización', icon: 'pi pi-fw pi-building', to: '/catalogos/organizacion', permissions: ['catalogos.organizacion'] },
+                { label: 'Dependencias', icon: 'pi pi-fw pi-th-large', to: '/catalogos/organizacion', permissions: ['catalogos.organizacion'] },
                 { label: 'Tipos de actividad', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-actividad', permissions: ['catalogos.tipos_actividad'] },
                 { label: 'Tipos de documento', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-documento', permissions: ['catalogos.tipos_documento'] },
                 { label: 'Tipos de proyecto', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-proyecto', permissions: ['catalogos.tipos_proyecto'] },
@@ -83,7 +82,7 @@ const AppMenu = () => {
          {
             label: 'Reportes',
             items: [
-                { label: 'Centro de Reportes', icon: 'pi pi-fw pi-chart-bar', to: '/reportes/index', permissions: ['reportes.ver'] },
+                { label: 'Centro de Reportes', icon: 'pi pi-fw pi-chart-bar', to: '/reportes/index', permissions: ['reportes'] },
             ],
             permissions: ['reportes']
         },

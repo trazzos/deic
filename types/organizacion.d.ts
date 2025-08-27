@@ -3,8 +3,6 @@ export interface Secretaria {
     id?: number;
     nombre: string;
     descripcion: string;
-    created_at?: string;
-    updated_at?: string;
 }
 
 export interface Subsecretaria {
@@ -16,8 +14,6 @@ export interface Subsecretaria {
         id: number;
         nombre: string;
     };
-    created_at?: string;
-    updated_at?: string;
 }
 
 export interface Direccion {
@@ -33,8 +29,27 @@ export interface Direccion {
             nombre: string;
         };
     };
-    created_at?: string;
-    updated_at?: string;
+
+}
+
+export interface Departamento {
+    id?: number;
+    nombre: string;
+    descripcion: string;
+    direccion_id: number;
+    direccion?: {
+        id: number;
+        nombre: string;
+        subsecretaria?: {
+            id: number;
+            nombre: string;
+            secretaria?: {
+                id: number;
+                nombre: string;
+            };
+        }
+    }
+
 }
 
 // Form interfaces for create/update operations
@@ -55,21 +70,10 @@ export interface DireccionForm {
     subsecretaria_id: number;
 }
 
-// API Response interfaces
-export interface ApiResponse<T> {
-    data: T;
-    message?: string;
-    status?: number;
-}
-
-export interface PaginatedResponse<T> {
-    data: T[];
-    current_page: number;
-    last_page: number;
-    per_page: number;
-    total: number;
-    from: number;
-    to: number;
+export interface DepartamentoForm {
+    nombre: string;
+    descripcion: string;
+    direccion_id: number;
 }
 
 // Filter interfaces for search/pagination

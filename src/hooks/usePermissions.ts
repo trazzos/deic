@@ -15,8 +15,7 @@ export const usePermissions = () => {
         hasAnyPermission,
         hasAllPermissions,
         // Helpers específicos para acciones comunes
-        canCreate: (resource: string) => hasPermission(`${resource}.crear`),
-        canRead: (resource: string) => hasPermission(`${resource}.eliminar`),
+        canCreate: (resource: string) => hasPermission(`${resource}.agregar`),
         canUpdate: (resource: string) => hasPermission(`${resource}.editar`),
         canDelete: (resource: string) => hasPermission(`${resource}.eliminar`),
         canManage: (resource: string) => hasPermission(`${resource}.acceso`),

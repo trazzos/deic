@@ -45,8 +45,12 @@ import {
 } from './reporte';
 
 import {
-    Proyecto
+    Secretaria,
+    Subsecretaria,
+    Direccion
 } from './proyecto';
+
+import { Organizacion } from './organizacion';
 
 type ChildContainerProps = {
     children: ReactNode;
@@ -98,5 +102,7 @@ export type {
     DetalleProyecto,
     ActividadDetalle,
     TareaDetalle,
-    Proyecto
+    Secretaria,
+    Subsecretaria,
+    Direccion,
 };
