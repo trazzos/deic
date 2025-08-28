@@ -48,6 +48,10 @@ import {
     Secretaria,
     Subsecretaria,
     Direccion
+} from './organizacion';
+
+import {
+    Proyecto
 } from './proyecto';
 
 import { Organizacion } from './organizacion';
@@ -105,4 +109,5 @@ export type {
     Secretaria,
     Subsecretaria,
     Direccion,
+    Proyecto
 };
