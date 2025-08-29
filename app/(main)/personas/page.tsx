@@ -1,7 +1,6 @@
 'use client';
 import { useEffect } from "react";
 import { useState } from "react";
-import * as Yup from 'yup';
 
 // PrimeReact components
 import { Button } from 'primereact/button';
@@ -23,83 +22,14 @@ import PermissionGuard from "@/src/components/PermissionGuard";
 import AccessDenied from "@/src/components/AccessDenied";
 import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 
-// Services, Hooks, Contexts, Types
+// Services, Hooks, Contexts, Types, Schemas
 import { useNotification } from '@/layout/context/notificationContext';
-import { DepartamentoService, PersonaService, RoleService } from "@/src/services";
+import { DepartamentoService, PersonaService, RoleService, OrganizacionService } from "@/src/services";
+import { mockOrganizacionPersonasService } from "@/src/services/mockOrganizacionPersonas";
 import { useFormErrorHandler } from '@/src/utils/errorUtils';
-import { Persona, Usuario } from '@/types';
+import { Persona, Usuario } from '@/types/persona';
+import { formularioSchema, usuarioSchema } from '@/src/schemas/persona';
 import { usePermissions } from "@/src/hooks/usePermissions";
-
-const formularioSchema = Yup.object().shape({
-    departamento_id: Yup.number().required('El departamento es obligatorio'),
-    nombre: Yup.string().required('El nombre es obligatorio'),
-    apellido_paterno: Yup.string().required('El apellido paterno es obligatorio'),
-    apellido_materno: Yup.string().required('El apellido materno es obligatorio'),
-    responsable_departamento: Yup.string().required('El ¿Es responsable de departamento? es obligatorio'),
-    email: Yup.string()
-        .nullable()
-        .when('$isExistingPersona', {
-            is: true, // Si es una persona existente
-            then: (schema) => schema.notRequired(),
-            otherwise: (schema) => schema
-                .when([], {
-                    is: (val: string | null) => !!val,
-                    then: (schema) => schema.email('El email debe ser un email válido'),
-                    otherwise: (schema) => schema.notRequired(),
-                }),
-        }),
-    password: Yup.string()
-        .when('$isExistingPersona', {
-            is: true, // Si es una persona existente
-            then: (schema) => schema.notRequired(),
-            otherwise: (schema) => schema
-                .when('email', {
-                    is: (val: string | null) => !!val,
-                    then: (schema) => schema
-                        .min(8, 'La contraseña debe tener al menos 8 caracteres')
-                        .required('La contraseña es obligatoria'),
-                    otherwise: (schema) => schema.notRequired(),
-                }),
-        }),
-    password_confirmation: Yup.string()
-        .when('$isExistingPersona', {
-            is: true, // Si es una persona existente
-            then: (schema) => schema.notRequired(),
-            otherwise: (schema) => schema
-                .when('email', {
-                    is: (val: string | null) => !!val,
-                    then: (schema) => schema
-                        .oneOf([Yup.ref('password'), undefined], 'Las contraseñas deben coincidir')
-                        .required('La confirmación de contraseña es obligatoria'),
-                    otherwise: (schema) => schema.notRequired(),
-                }),
-        }),
-});
-
-const usuarioSchema = Yup.object().shape({
-    email: Yup.string()
-        .email('El email debe ser un email válido')
-        .required('El email es obligatorio'),
-    roles: Yup.array().of(Yup.string()).required('Seleccione al menos un rol'),    
-    password: Yup.string()
-        .when('$isExistingUser', {
-            is: false, // Si es un usuario nuevo
-            then: (schema) => schema
-                .min(8, 'La contraseña debe tener al menos 8 caracteres')
-                .required('La contraseña es obligatoria'),
-            otherwise: (schema) => schema
-                .min(8, 'La contraseña debe tener al menos 8 caracteres')
-                .notRequired(), // Para usuarios existentes, la contraseña es opcional
-        }),
-    password_confirmation: Yup.string()
-        .when('password', {
-            is: (val: string) => !!val && val.length > 0,
-            then: (schema) => schema
-                .oneOf([Yup.ref('password'), undefined], 'Las contraseñas deben coincidir')
-                .required('La confirmación de contraseña es obligatoria'),
-            otherwise: (schema) => schema.notRequired(),
-        }),
-});
 
 const PersonasPage = () => {
 
@@ -108,9 +38,20 @@ const PersonasPage = () => {
     const accessDelete = isSuperAdmin || canDelete('gestion_cuentas.personas');
     const accessAdminCuenta = isSuperAdmin || hasPermission('gestion_cuentas.personas.administrar_cuenta');
 
-    const [departamentos, setDepartamentos] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
     const [personas, setPersonas] = useState<Persona[]>([]);
+    
+    // Estados para las dependencias - se cargan una sola vez
+    const [secretarias, setSecretarias] = useState<any[]>([]);
+    const [todasSubsecretarias, setTodasSubsecretarias] = useState<any[]>([]);
+    const [todasDirecciones, setTodasDirecciones] = useState<any[]>([]);
+    const [todosDepartamentos, setTodosDepartamentos] = useState<any[]>([]);
+    
+    // Estados para filtros jerárquicos del lado del cliente
+    const [subsecretariasFiltradas, setSubsecretariasFiltradas] = useState<any[]>([]);
+    const [direccionesFiltradas, setDireccionesFiltradas] = useState<any[]>([]);
+    const [departamentosFiltrados, setDepartamentosFiltrados] = useState<any[]>([]);
+    
     const [loading, setLoading] = useState(false);
     const [loadingGuardar, setLoadingGuardar] = useState(false);
     const [visibleFormulario, setVisibleFormulario] = useState(false);
@@ -118,7 +59,12 @@ const PersonasPage = () => {
     const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
     const [formularioPersona, setFormularioPersona] = useState<any>({
         id: null,
-        departamento_id:null,
+        dependencia_type: null,
+        dependencia_id: null,
+        secretaria_id: null,
+        subsecretaria_id: null,
+        direccion_id: null,
+        departamento_id: null,
         nombre: '',
         apellido_paterno: '',
         apellido_materno: '',
@@ -135,7 +81,17 @@ const PersonasPage = () => {
 
     // Filtros personalizados
     const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
+    const [filtroDependenciaType, setFiltroDependenciaType] = useState<string | null>(null);
+    const [filtroSecretaria, setFiltroSecretaria] = useState<number | null>(null);
+    const [filtroSubsecretaria, setFiltroSubsecretaria] = useState<number | null>(null);
+    const [filtroDireccion, setFiltroDireccion] = useState<number | null>(null);
     const [filtroDepartamento, setFiltroDepartamento] = useState<number | null>(null);
+    
+    // Estados para filtros jerárquicos en busqueda
+    const [filtroSubsecretariasFiltradas, setFiltroSubsecretariasFiltradas] = useState<any[]>([]);
+    const [filtroDireccionesFiltradas, setFiltroDireccionesFiltradas] = useState<any[]>([]);
+    const [filtroDepartamentosFiltrados, setFiltroDepartamentosFiltrados] = useState<any[]>([]);
+    
     const [showFilters, setShowFilters] = useState(false);
     const [visibleUsuarioDialog, setVisibleUsuarioDialog] = useState(false);
     const [selectedPersonaForUser, setSelectedPersonaForUser] = useState<Persona | null>(null);
@@ -149,47 +105,140 @@ const PersonasPage = () => {
     const [usuarioErrors, setUsuarioErrors] = useState<{ [key: string]: string }>({});
 
     useEffect(() => {
-        setLoading(true);
-        RoleService.getListRolesSinPermiso()
-            .then((response:any) => {
-                const roles = response.data;
-                setRoles(roles);
-            })
-            .catch((error:any) => {
-                showError(error.message || 'Ha ocurrido un error al obtener la lista de roles');
-            });
-        DepartamentoService.getListDepartamento()
-            .then((response:any) => {
-                const departamentos = response.data.map((item:any) => ({
-                    id: item.id,
-                    nombre: item.nombre,
-                }));
-                setDepartamentos(departamentos);
-            })
-            .catch((error:any) => {
-                showError(error.message || 'Ha ocurrido un error al obtener la lista de departamentos');
-            });
+        const loadInitialData = async () => {
+            setLoading(true);
+            
+            try {
+                // Cargar todos los catálogos en paralelo
+                const [
+                    rolesResponse,
+                    departamentosResponse, 
+                    secretariasResponse,
+                    subsecretariasResponse,
+                    direccionesResponse,
+                    personasResponse
+                ] = await Promise.all([
+                    RoleService.getListRolesSinPermiso(),
+                    DepartamentoService.getListDepartamento(),
+                    OrganizacionService.getSecretarias(),
+                    OrganizacionService.getSubsecretarias(), 
+                    OrganizacionService.getDirecciones(),
+                    PersonaService.getListPersona()
+                ]);
 
-        PersonaService.getListPersona()
-            .then((response:any) => {
-                setPersonas(response.data);
-            })
-            .catch((error:any) => {
-                showError(error.message || 'Ha ocurrido un error al obtener la lista de personas');
-            })
-            .finally(() => {
+                // Procesar y setear todos los datos
+                setRoles(rolesResponse.data);
+                setTodosDepartamentos(departamentosResponse.data);
+                setSecretarias(secretariasResponse.data);
+                setTodasSubsecretarias(subsecretariasResponse.data);
+                setTodasDirecciones(direccionesResponse.data);
+                setPersonas(personasResponse.data);
+
+            } catch (error: any) {
+                showError(error.message || 'Ha ocurrido un error al cargar los datos iniciales');
+            } finally {
                 setLoading(false);
-            });
+            }
+        };
+
+        loadInitialData();
     }, [showError]);
 
     const handleFormularioChange = (e: any) => {
 
         const name = e.target?.name ?? e.originalEvent?.target?.name;
         const value = e.value ?? e.target?.value;
-        setFormularioPersona((prev:any) => ({
+
+        setFormularioPersona((prev: any) => ({
             ...prev,
-            [name]: value,
+            [name]: value
         }));
+
+        // Manejar cambios en dependencia_type para limpiar campos y filtrar datos
+        if (name === 'dependencia_type') {
+            setFormularioPersona((prev: any) => ({
+                ...prev,
+                dependencia_type: value,
+                dependencia_id: null,
+                secretaria_id: null,
+                subsecretaria_id: null,
+                direccion_id: null,
+                departamento_id: null
+            }));
+            
+            // Limpiar listas filtradas
+            setSubsecretariasFiltradas([]);
+            setDireccionesFiltradas([]);
+            setDepartamentosFiltrados([]);
+        }
+
+        // Manejar cambios en secretaria_id para filtrar subsecretarías del lado del cliente
+        if (name === 'secretaria_id') {
+            setFormularioPersona((prev: any) => ({
+                ...prev,
+                secretaria_id: value,
+                subsecretaria_id: null,
+                direccion_id: null,
+                departamento_id: null,
+                dependencia_id: prev.dependencia_type === 'Secretaria' ? value : null
+            }));
+            
+            setDireccionesFiltradas([]);
+            setDepartamentosFiltrados([]);
+            
+            if (value && ['Subsecretaria', 'Direccion', 'Departamento'].includes(formularioPersona.dependencia_type)) {
+                const filtradas = todasSubsecretarias.filter(sub => sub.secretaria?.id === value);
+                setSubsecretariasFiltradas(filtradas);
+            } else {
+                setSubsecretariasFiltradas([]);
+            }
+        }
+
+        // Manejar cambios en subsecretaria_id para filtrar direcciones del lado del cliente
+        if (name === 'subsecretaria_id') {
+            setFormularioPersona((prev: any) => ({
+                ...prev,
+                subsecretaria_id: value,
+                direccion_id: null,
+                departamento_id: null,
+                dependencia_id: prev.dependencia_type === 'Subsecretaria' ? value : null
+            }));
+            
+            setDepartamentosFiltrados([]);
+            
+            if (value && ['Direccion', 'Departamento'].includes(formularioPersona.dependencia_type)) {
+                const filtradas = todasDirecciones.filter(dir => dir.subsecretaria?.id === value);
+                setDireccionesFiltradas(filtradas);
+            } else {
+                setDireccionesFiltradas([]);
+            }
+        }
+
+        // Manejar cambios en direccion_id para filtrar departamentos del lado del cliente
+        if (name === 'direccion_id') {
+            setFormularioPersona((prev: any) => ({
+                ...prev,
+                direccion_id: value,
+                departamento_id: null,
+                dependencia_id: prev.dependencia_type === 'Direccion' ? value : null
+            }));
+            
+            if (value && formularioPersona.dependencia_type === 'Departamento') {
+                const filtrados = todosDepartamentos.filter(dep => dep.direccion?.id === value);
+                setDepartamentosFiltrados(filtrados);
+            } else {
+                setDepartamentosFiltrados([]);
+            }
+        }
+
+        // Actualizar dependencia_id cuando se selecciona el departamento final
+        if (name === 'departamento_id') {
+            setFormularioPersona((prev: any) => ({
+                ...prev,
+                departamento_id: value,
+                dependencia_id: prev.dependencia_type === 'Departamento' ? value : null
+            }));
+        }
     };
     
     // Hook personalizado para manejar errores de formulario principal
@@ -206,9 +255,11 @@ const PersonasPage = () => {
             });
             setFormularioErrors({});
 
+            // el payload que se envia excluye secretaria_id, subsecretaria_id, direccion_id, departamento_id, en ves de eso envia dependencia_id, dependiendo de que se seleccione en dependencia_type
+            const { secretaria_id, subsecretaria_id, direccion_id, departamento_id, ...resto } = formularioPersona;
             const contexto = {
-                ...formularioPersona,
-                responsable_departamento: formularioPersona.responsable_departamento ? 'Si' : 'No'
+                ...resto,
+                es_titular: formularioPersona.es_titular ? 'Si' : 'No'
             }
             
             const response: any = formularioPersona.id
@@ -247,8 +298,67 @@ const PersonasPage = () => {
         setSelectedPersona(data);
         setFormularioPersona((_prev:any) => ({
            ...data,
-           responsable_departamento: data.responsable_departamento === 'Si',
+           dependencia_type: data.dependencia_type == 'No asignado' ? null : data.dependencia_type,
+           secretaria_id:null,
+           subsecretaria_id:null,
+           direccion_id:null,
+           departamento_id:null,
+           es_titular: data.es_titular === 'Si',
         }));
+ 
+        switch(data.dependencia_type) {
+            case 'Secretaria':
+                setFormularioPersona((prev: any) => ({
+                    ...prev,
+                    secretaria_id: data.dependencia_id
+                }));
+                break;
+            case 'Subsecretaria':
+                const subsecretaria = todasSubsecretarias.find(sub => sub.id === data.dependencia_id);
+                let filtradasSubs = todasSubsecretarias.filter(sub => sub.secretaria?.id === subsecretaria?.secretaria?.id);
+                setSubsecretariasFiltradas(filtradasSubs);
+
+                setFormularioPersona((prev: any) => ({
+                    ...prev,
+                    secretaria_id: subsecretaria?.secretaria?.id || null,
+                    subsecretaria_id: data.dependencia_id
+                }));
+
+                break;
+            case 'Direccion':
+                const direccion = todasDirecciones.find(dir => dir.id === data.dependencia_id);
+                let filtradasDir = todasDirecciones.filter(dir => dir.subsecretaria?.id === direccion?.subsecretaria?.id);
+                setDireccionesFiltradas(filtradasDir);
+
+                setFormularioPersona((prev: any) => ({
+                    ...prev,
+                    secretaria_id: direccion?.subsecretaria?.secretaria?.id || null,
+                    subsecretaria_id: direccion?.subsecretaria?.id || null,
+                    direccion_id: data.dependencia_id,
+                    
+                }));
+                break;
+            case 'Departamento':
+                const departamento = todosDepartamentos.find(dep => dep.id === data.dependencia_id);
+
+                let filtradasDeps = todosDepartamentos.filter(dep => dep.direccion?.id === departamento?.direccion?.id);
+                setDepartamentosFiltrados(filtradasDeps);
+
+                let filtradasDirDep = todasDirecciones.filter(dir => dir.subsecretaria?.id === departamento?.direccion?.subsecretaria?.id);
+                setDireccionesFiltradas(filtradasDirDep);
+
+                let filtradasSubsDep = todasSubsecretarias.filter(sub => sub.secretaria?.id === departamento?.direccion?.subsecretaria?.secretaria.id);
+                setSubsecretariasFiltradas(filtradasSubsDep);
+
+                setFormularioPersona((prev: any) => ({
+                    ...prev,
+                    secretaria_id: departamento?.direccion?.subsecretaria?.secretaria?.id || null,
+                    subsecretaria_id: departamento?.direccion?.subsecretaria?.id || null,
+                    direccion_id: departamento?.direccion?.id || null,
+                    departamento_id: data.dependencia_id,
+                }));
+                break;
+        }
     
         setVisibleFormulario(true);
        
@@ -293,21 +403,44 @@ const PersonasPage = () => {
     const clearFilter = () => {
         let _filters = { ...filters };
         _filters['global'] = { value: null, matchMode: 'contains' };
-        setFilters(_filters);   
+        setFilters(_filters);
+        setGlobalFilterValue('');
+        
+        // Limpiar filtros jerárquicos
+        setFiltroUsuario(null);
+        setFiltroDependenciaType(null);
+        setFiltroSecretaria(null);
+        setFiltroSubsecretaria(null);
+        setFiltroDireccion(null);
+        setFiltroDepartamento(null);
+        setFiltroSubsecretariasFiltradas([]);
+        setFiltroDireccionesFiltradas([]);
+        setFiltroDepartamentosFiltrados([]);
     }
 
     const onAgregar = () => {
         setFormularioPersona({
             id: null,
-            departamento_id:null,
+            dependencia_type: null,
+            dependencia_id: null,
+            secretaria_id: null,
+            subsecretaria_id: null,
+            direccion_id: null,
+            departamento_id: null,
             nombre: '',
             apellido_paterno: '',
             apellido_materno: '',
-            responsable_departamento: false,
+            es_titular: false,
             email: '',
             password: '',
             password_confirmation: ''   
         });
+        
+        // Limpiar listas jerárquicas filtradas
+        setSubsecretariasFiltradas([]);
+        setDireccionesFiltradas([]);
+        setDepartamentosFiltrados([]);
+        
         setVisibleFormulario(true);
     };
 
@@ -378,57 +511,199 @@ const PersonasPage = () => {
                 </div>
                 
                 {showFilters && (
-                    <div className="flex flex-column md:flex-row gap-3 p-3 bg-gray-50 border-round">
-                        <div className="flex flex-auto gap-2">
-                            <span className="p-input-icon-left">
-                                <i className="pi pi-search" />
-                                <InputText 
-                                    value={globalFilterValue} 
-                                    onChange={onGlobalFilterChange} 
-                                    placeholder="Buscar por nombre" 
-                                    className="w-full"
+                    <div className="flex flex-column gap-3 p-3 border-round">
+                        {/* Fila 1: Búsqueda por nombre y tipo de dependencia */}
+                        <div className="flex flex-column md:flex-row gap-2">
+                            <div className="flex flex-column items-center gap-2">
+                                <label htmlFor="">Busqueda por nombre</label>
+                                <span className="p-input-icon-left">
+                                    <i className="pi pi-search" />
+                                    <InputText 
+                                        value={globalFilterValue} 
+                                        onChange={onGlobalFilterChange} 
+                                        placeholder="Buscar por nombre" 
+                                        className="w-full"
+                                    />
+                                </span>
+                            </div>
+                            <div className="flex flex-column gap-2">
+                                <label htmlFor="">Tipo de dependencia</label>
+                                 <Dropdown
+                                    value={filtroDependenciaType}
+                                    showClear
+                                    options={[
+                                        { label: 'Secretaría', value: 'Secretaria' },
+                                        { label: 'Subsecretaría', value: 'Subsecretaria' },
+                                        { label: 'Dirección', value: 'Direccion' },
+                                        { label: 'Departamento', value: 'Departamento' },
+                                    ]}
+                                    onChange={e => handleFiltroChange('filtroDependenciaType', e.value)}
+                                    placeholder="Seleccione una opción"
+                                    className="w-14rem"
                                 />
-                            </span>
-                            <Dropdown
-                                value={filtroDepartamento}
-                                options={[{ label: 'Todos los departamentos', value: null }, ...departamentos.map(d => ({ label: d.nombre, value: d.id }))]}
-                                onChange={e => setFiltroDepartamento(e.value)}
-                                placeholder="Departamento"
-                                className="w-14rem"
-                            />
-                            <Dropdown
-                                value={filtroUsuario}
-                                options={[
-                                    { label: '¿Cuenta de usuario?', value: null },
-                                    { label: 'Sí', value: 'si' },
-                                    { label: 'No', value: 'no' },
-                                ]}
-                                onChange={e => setFiltroUsuario(e.value)}
-                                placeholder="¿Cuenta de usuario?"
-                                className="w-12rem"
+                            </div>
+                            <div className="flex flex-column gap-2">
+                                <label htmlFor="">¿Cuenta con usuario?</label>
+                                <Dropdown
+                                    value={filtroUsuario}
+                                    showClear
+                                    options={[
+                                        { label: 'Sí', value: 'si' },
+                                        { label: 'No', value: 'no' },
+                                    ]}
+                                    onChange={e => setFiltroUsuario(e.value)}
+                                    placeholder="Seleccione una opción"
+                                    className="w-12rem"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Fila 2: Filtros cascada jerárquicos */}
+                        <div className="flex flex-column md:flex-row gap-3">
+                            <div className="flex flex-auto gap-2">
+                                {
+                                     ['Secretaria','Subsecretaria','Direccion','Departamento'].includes(filtroDependenciaType || '') && (
+                                         <Dropdown
+                                            showClear
+                                            value={filtroSecretaria}
+                                            options={[ ...secretarias.map(s => ({ label: s.nombre, value: s.id }))]}
+                                            onChange={e => handleFiltroChange('filtroSecretaria', e.value)}
+                                            placeholder="Secretaría"
+                                            className="w-14rem"
+                                            disabled={filtroDependenciaType === null || filtroDependenciaType === '' || filtroDependenciaType === undefined}
+                                        />)
+                                }
+                               
+                                { 
+                                    ['Subsecretaria','Direccion','Departamento'].includes(filtroDependenciaType || '') && (
+                                        <Dropdown
+                                            showClear
+                                            value={filtroSubsecretaria}
+                                            options={[ ...filtroSubsecretariasFiltradas.map(s => ({ label: s.nombre, value: s.id }))]}
+                                            onChange={e => handleFiltroChange('filtroSubsecretaria', e.value)}
+                                            placeholder="Seleccione subsecretaría"
+                                            className="w-14rem"
+                                            disabled={!filtroSecretaria} />
+                                    )
+                                }
+                                {
+                                   ['Direccion','Departamento'].includes(filtroDependenciaType || '') && (
+                                       <Dropdown
+                                            showClear
+                                            value={filtroDireccion}
+                                            options={[...filtroDireccionesFiltradas.map(d => ({ label: d.nombre, value: d.id }))]}
+                                            onChange={e => handleFiltroChange('filtroDireccion', e.value)}
+                                            placeholder="Seleccione dirección"
+                                            className="w-14rem"
+                                            disabled={!filtroSubsecretaria}/>
+                                    ) 
+                                }
+                                 {
+                                   ['Departamento'].includes(filtroDependenciaType || '') && (
+                                         <Dropdown
+                                            showClear
+                                            value={filtroDepartamento}
+                                            options={[ ...filtroDepartamentosFiltrados.map(d => ({ label: d.nombre, value: d.id }))]}
+                                            onChange={e => handleFiltroChange('filtroDepartamento', e.value)}
+                                            placeholder="Seleccione departamento"
+                                            className="w-14rem"
+                                            disabled={!filtroDireccion}/>
+                                    ) 
+                                }
+                            </div>
+                        </div>
+
+                        {/* Fila 3: Otros filtros */}
+                        <div className="flex flex-column md:flex-row justify-content-start md:justify-content-end">
+                            <Button 
+                                type="button" 
+                                icon="pi pi-filter-slash" 
+                                label="Limpiar filtros" 
+                                outlined 
+                                onClick={clearFilter}
+                                className="w-auto"
                             />
                         </div>
-                        <Button 
-                            type="button" 
-                            icon="pi pi-filter-slash" 
-                            label="Limpiar" 
-                            outlined 
-                            onClick={clearFilter}
-                            className="w-auto"
-                        />
                     </div>
                 )}
             </div>
         );
     };
 
+    // Función para manejar cambios en filtros jerárquicos
+    const handleFiltroChange = (name: string, value: any) => {
+        if (name === 'filtroDependenciaType') {
+            setFiltroDependenciaType(value === undefined ? null : value);
+            setFiltroSecretaria(null);
+            setFiltroSubsecretaria(null);
+            setFiltroDireccion(null);
+            setFiltroDepartamento(null);
+            setFiltroSubsecretariasFiltradas([]);
+            setFiltroDireccionesFiltradas([]);
+            setFiltroDepartamentosFiltrados([]);
+        } else if (name === 'filtroSecretaria') {
+            setFiltroSecretaria(value === undefined ? null : value);
+            setFiltroSubsecretaria(null);
+            setFiltroDireccion(null);
+            setFiltroDepartamento(null);
+            setFiltroDireccionesFiltradas([]);
+            setFiltroDepartamentosFiltrados([]);
+            
+            if (value && filtroDependenciaType && ['Subsecretaria', 'Direccion', 'Departamento'].includes(filtroDependenciaType)) {
+                const filtradas = todasSubsecretarias.filter(sub => sub.secretaria?.id === value);
+                setFiltroSubsecretariasFiltradas(filtradas);
+            } else {
+                setFiltroSubsecretariasFiltradas([]);
+            }
+        } else if (name === 'filtroSubsecretaria') {
+            setFiltroSubsecretaria(value === undefined ? null : value);
+            setFiltroDireccion(null);
+            setFiltroDepartamento(null);
+            setFiltroDepartamentosFiltrados([]);
+            
+            if (value && filtroDependenciaType && ['Direccion', 'Departamento'].includes(filtroDependenciaType)) {
+                const filtradas = todasDirecciones.filter(dir => dir.subsecretaria?.id === value);
+                setFiltroDireccionesFiltradas(filtradas);
+            } else {
+                setFiltroDireccionesFiltradas([]);
+            }
+        } else if (name === 'filtroDireccion') {
+            setFiltroDireccion(value === undefined ? null : value);
+            setFiltroDepartamento(null);
+            
+            if (value && filtroDependenciaType === 'Departamento') {
+                const filtrados = todosDepartamentos.filter(dep => dep.direccion?.id === value);
+                setFiltroDepartamentosFiltrados(filtrados);
+            } else {
+                setFiltroDepartamentosFiltrados([]);
+            }
+        } else if (name === 'filtroDepartamento') {
+            setFiltroDepartamento(value === undefined ? null : value);
+        }
+    };
+
     // Filtro aplicado a la tabla
     const personasFiltradas = personas.filter((p) => {
         const nombreCompleto = `${p.nombre} ${p.apellido_paterno} ${p.apellido_materno}`.toLowerCase();
         const nombreMatch = globalFilterValue ? nombreCompleto.includes(globalFilterValue.toLowerCase()) : true;
-        const depMatch = filtroDepartamento ? p.departamento_id === filtroDepartamento : true;
         const usuarioMatch = filtroUsuario === 'si' ? !!p.email : filtroUsuario === 'no' ? !p.email : true;
-        return nombreMatch && depMatch && usuarioMatch;
+        
+        // Filtro por tipo de dependencia
+        const tipoMatch = filtroDependenciaType ? p.dependencia_type === filtroDependenciaType : true;
+        
+        // Filtro por dependencia específica según el tipo seleccionado
+        let dependenciaMatch = true;
+        if (filtroDependenciaType === 'Secretaria' && filtroSecretaria) {
+            dependenciaMatch = p.dependencia_id === filtroSecretaria;
+        } else if (filtroDependenciaType === 'Subsecretaria' && filtroSubsecretaria) {
+            dependenciaMatch = p.dependencia_id === filtroSubsecretaria;
+        } else if (filtroDependenciaType === 'Direccion' && filtroDireccion) {
+            dependenciaMatch = p.dependencia_id === filtroDireccion;
+        } else if (filtroDependenciaType === 'Departamento' && filtroDepartamento) {
+            dependenciaMatch = p.dependencia_id === filtroDepartamento;
+        }
+        
+        return nombreMatch && usuarioMatch && tipoMatch && dependenciaMatch;
     });
 
     const bodyNombre = (rowData:Persona) => {  
@@ -439,11 +714,28 @@ const PersonasPage = () => {
         );
     }
 
-    const bodyEsResponsable = (rowData:Persona) => {  
+    const bodyEsTitular = (rowData:Persona) => {  
         return (
             <span>
-                <Tag style={{ fontSize: '1rem' }} severity={rowData.responsable_departamento === 'Si' ? 'success' : 'danger'}>{rowData.responsable_departamento}</Tag>
+                <Tag style={{ fontSize: '.875rem' }} severity={rowData.es_titular === 'Si' ? 'success' : 'danger'}>{rowData.es_titular ?? 'No'}</Tag>
             </span>
+        );
+    }
+
+    const bodyDependencia = (rowData:Persona) => {  
+        return (    
+            <div className="flex flex-column items-align-center gap-2">
+                <div className="flex flex-1 gap-2">
+                    <span className="text-surface-200  text-sm">Tipo:</span>
+                    <span className="text-surface-600 font-bold text-sm">{rowData.dependencia_type}</span>
+                </div>
+                {['Secretaria', 'Subsecretaria', 'Direccion', 'Departamento'].includes(rowData.dependencia_type ?? '') && (
+                    <div className="flex flex-1 gap-1">
+                        <span className="text-surface-200 text-sm">Nombre:</span>
+                        <span className="text-surface-600 font-medium text-sm">{rowData.nombre_dependencia}</span>
+                    </div>
+                )}
+            </div>
         );
     }
 
@@ -457,7 +749,7 @@ const PersonasPage = () => {
                 value={tieneCuenta ? 'Sí' : 'No'}
                 severity={tieneCuenta ? 'success' : undefined}
                 className={tieneCuenta ? '' : 'surface-200 text-900 border-none'}
-                style={{ fontSize: '1rem', minWidth: 32, textAlign: 'center' }}
+                style={{ fontSize: '.875rem', minWidth: 24, textAlign: 'center' }}
             />
         );
     };
@@ -663,16 +955,15 @@ const PersonasPage = () => {
                                 style={{ minWidth: '10rem' }}
                             />
                             <Column
-                                field="nombre_departamento"
-                                header="Departamento"
-                                filter
-                                filterPlaceholder="Buscar por departamento"
+                                field="dependencia"
+                                header="Dependencia"
+                                body={bodyDependencia}
                                 style={{ minWidth: '8rem' }}
                             />
                             <Column
-                                body={bodyEsResponsable}
+                                body={bodyEsTitular}
                                 bodyClassName="text-center"
-                                header="Responsable de departamento"
+                                header="Es titular"
                                 style={{ minWidth: '8rem' }}
                             />
                             <Column
@@ -737,33 +1028,125 @@ const PersonasPage = () => {
                                             <small className='text-red-600'>{formularioErrors.apellido_materno}</small>
                                         )}
                                     </div> 
+                                    
                                     <div className="flex flex-column gap-2">
-                                        <label htmlFor="" className='font-medium'>Departamento <span className='text-red-600'>*</span></label>
-                                        <Dropdown 
-                                                    name="departamento_id"
-                                                    value={formularioPersona.departamento_id}
-                                                    onChange={handleFormularioChange}
-                                                    options={departamentos} 
-                                                    optionLabel="nombre" 
-                                                    optionValue='id'
-                                                    placeholder="Seleccione una opción" 
-                                                    className="w-full"/>
-                                        {formularioErrors.departamento_id && (
-                                            <small className='text-red-600'>{formularioErrors.departamento_id}</small>
+                                        <label htmlFor="" className='font-medium'>Tipo de Dependencia <span className='text-red-600'>*</span></label>
+                                        <Dropdown
+                                            name="dependencia_type"
+                                            showClear
+                                            value={formularioPersona.dependencia_type}
+                                            options={[
+                                                { label: 'Secretaria', value: 'Secretaria' },
+                                                { label: 'Subsecretaria', value: 'Subsecretaria' },
+                                                { label: 'Direccion', value: 'Direccion' },
+                                                { label: 'Departamento', value: 'Departamento' }
+                                            ]}
+                                            onChange={handleFormularioChange}
+                                            placeholder="Seleccione tipo de dependencia"
+                                        />
+                                        {formularioErrors.dependencia_type && (
+                                            <small className='text-red-600'>{formularioErrors.dependencia_type}</small>
                                         )}
                                     </div>
+
+                                    {/* Secretaría - Siempre visible si hay tipo seleccionado */}
+                                    {formularioPersona.dependencia_type && (
+                                        <div className="flex flex-column gap-2">
+                                            <label htmlFor="" className='font-medium'>
+                                                Secretaría 
+                                                {formularioPersona.dependencia_type === 'Secretaria' && <span className='text-red-600'>*</span>}
+                                            </label>
+                                            <Dropdown
+                                                name="secretaria_id"
+                                                showClear
+                                                value={formularioPersona.secretaria_id}
+                                                options={secretarias.map(s => ({ label: s.nombre, value: s.id }))}
+                                                onChange={handleFormularioChange}
+                                                placeholder="Seleccione secretaría"
+                                            />
+                                            {formularioErrors.secretaria_id && (
+                                                <small className='text-red-600'>{formularioErrors.secretaria_id}</small>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Subsecretaría - Visible si tipo es Subsecretaria, Direccion o Departamento */}
+                                    {formularioPersona.dependencia_type && ['Subsecretaria', 'Direccion', 'Departamento'].includes(formularioPersona.dependencia_type) && (
+                                        <div className="flex flex-column gap-2">
+                                            <label htmlFor="" className='font-medium'>
+                                                Subsecretaría 
+                                                {formularioPersona.dependencia_type === 'Subsecretaria' && <span className='text-red-600'>*</span>}
+                                            </label>
+                                            <Dropdown
+                                                name="subsecretaria_id"
+                                                value={formularioPersona.subsecretaria_id}
+                                                options={subsecretariasFiltradas.map((s: any) => ({ label: s.nombre, value: s.id }))}
+                                                onChange={handleFormularioChange}
+                                                placeholder="Seleccione subsecretaría"
+                                                disabled={!formularioPersona.secretaria_id || subsecretariasFiltradas.length === 0}
+                                                className={!formularioPersona.secretaria_id ? 'surface-100' : ''}
+                                            />
+                                            {formularioErrors.subsecretaria_id && (
+                                                <small className='text-red-600'>{formularioErrors.subsecretaria_id}</small>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Dirección - Visible si tipo es Direccion o Departamento */}
+                                    {formularioPersona.dependencia_type && ['Direccion', 'Departamento'].includes(formularioPersona.dependencia_type) && (
+                                        <div className="flex flex-column gap-2">
+                                            <label htmlFor="" className='font-medium'>
+                                                Dirección 
+                                                {formularioPersona.dependencia_type === 'Direccion' && <span className='text-red-600'>*</span>}
+                                            </label>
+                                            <Dropdown
+                                                name="direccion_id"
+                                                value={formularioPersona.direccion_id}
+                                                options={direccionesFiltradas.map((d: any) => ({ label: d.nombre, value: d.id }))}
+                                                onChange={handleFormularioChange}
+                                                placeholder="Seleccione dirección"
+                                                disabled={!formularioPersona.subsecretaria_id || direccionesFiltradas.length === 0}
+                                                className={!formularioPersona.subsecretaria_id ? 'surface-100' : ''}
+                                            />
+                                            {formularioErrors.direccion_id && (
+                                                <small className='text-red-600'>{formularioErrors.direccion_id}</small>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Departamento - Visible solo si tipo es Departamento */}
+                                    {formularioPersona.dependencia_type === 'Departamento' && (
+                                        <div className="flex flex-column gap-2">
+                                            <label htmlFor="" className='font-medium'>
+                                                Departamento <span className='text-red-600'>*</span>
+                                            </label>
+                                            <Dropdown
+                                                name="departamento_id"
+                                                value={formularioPersona.departamento_id}
+                                                options={departamentosFiltrados.map((d: any) => ({ label: d.nombre, value: d.id }))}
+                                                onChange={handleFormularioChange}
+                                                placeholder="Seleccione departamento"
+                                                disabled={!formularioPersona.direccion_id || departamentosFiltrados.length === 0}
+                                                className={!formularioPersona.direccion_id ? 'surface-100' : ''}
+                                            />
+                                            {formularioErrors.departamento_id && (
+                                                <small className='text-red-600'>{formularioErrors.departamento_id}</small>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <div className="flex flex-row align-items-center gap-2">
-                                        <label htmlFor="responsable_departamento" 
-                                            className='font-medium'>¿Es responsable de departamento?</label>
+                                        <label htmlFor="es_titular" 
+                                            className='font-medium'>¿Es titular?</label>
                                         <InputSwitch 
-                                            inputId="responsable_departamento"
-                                            checked={formularioPersona?.responsable_departamento === true }
-                                            name="responsable_departamento"
+                                            inputId="es_titular"
+                                            checked={formularioPersona?.es_titular === true }
+                                            name="es_titular"
                                             onChange={(e: InputSwitchChangeEvent) => handleFormularioChange(e)} />
                                             <span className='text-red-600'>*</span>
-                                        
-                                        {formularioErrors.responsable_departamento && (
-                                            <small className='text-red-600'>{formularioErrors.responsable_departamento}</small>
+
+                                        {formularioErrors.es_titular && (
+                                            <small className='text-red-600'>{formularioErrors.es_titular}</small>
                                         )}
                                     </div> 
                                     

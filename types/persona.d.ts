@@ -1,10 +1,12 @@
 export interface Persona {
     id: number;
-    departamento_id: number | null;
+    dependencia_type: 'Secretaria' | 'Subsecretaria' | 'Direccion' | 'Departamento' | null;
+    dependencia_id: number | null;
     nombre: string;
     apellido_paterno: string;
     apellido_materno: string
-    responsable_departamento:string;
+    es_titular?: string;
+    nombre_dependencia?: string;
     email: string | null;
     cuenta_activa?: boolean;     
     password: string | null;
@@ -16,4 +18,9 @@ export interface Usuario {
     roles: string[] | null;
     password_confirmation: string | null;
 
+}
+
+export default {
+    Persona, 
+    Usuario,
 }
