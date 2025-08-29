@@ -25,7 +25,6 @@ import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 // Services, Hooks, Contexts, Types, Schemas
 import { useNotification } from '@/layout/context/notificationContext';
 import { DepartamentoService, PersonaService, RoleService, OrganizacionService } from "@/src/services";
-import { mockOrganizacionPersonasService } from "@/src/services/mockOrganizacionPersonas";
 import { useFormErrorHandler } from '@/src/utils/errorUtils';
 import { Persona, Usuario } from '@/types/persona';
 import { formularioSchema, usuarioSchema } from '@/src/schemas/persona';
