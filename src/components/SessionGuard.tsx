@@ -69,7 +69,7 @@ export const SessionGuard: React.FC<SessionGuardProps> = ({ children }) => {
         }
 
         // Si está autenticado, ocultar pantalla de carga
-        if (isAuthenticated && user) {
+        if (isAuthenticated && user?.id) {
             setShowLoadingScreen(false);
         }
 

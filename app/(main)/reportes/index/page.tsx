@@ -5,9 +5,13 @@ import { Card } from 'primereact/card';
 import { Button } from 'primereact/button';
 
 import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+import { usePermissions } from "@/src/hooks/usePermissions";
 
 export default function ReportesIndexPage() {
     const router = useRouter();
+    const { hasPermission } = usePermissions();
 
     const breadcrumbItems = [
         { label: 'Reportes' },
@@ -23,6 +27,7 @@ export default function ReportesIndexPage() {
             ruta: '/reportes/proyectos',
             color: 'blue',
             disponible: true,
+            permission:'reportes.proyectos',
         },
         {
             id: 'actividades',
@@ -31,7 +36,8 @@ export default function ReportesIndexPage() {
             icon: 'pi pi-list',
             ruta: '/reportes/actividades',
             color: 'green',
-            disponible: false
+            disponible: false,
+            permission:'reportes.actividades',
         },
     ];
 
@@ -72,19 +78,18 @@ export default function ReportesIndexPage() {
             </div>
         );
 
-        return (
+        return hasPermission(reporte.permission) && (
             <div key={reporte.id} className="col-12 md:col-6 lg:col-4">
                 <Card
                     header={cardHeader}
                     footer={cardFooter}
                     className={`h-full ${reporte.disponible === false ? 'opacity-75' : 'cursor-pointer'} transition-all transition-duration-200 hover:shadow-3`}
-                    onClick={() => navegarAReporte(reporte.ruta, reporte.disponible !== false)}
-                >
+                    onClick={() => navegarAReporte(reporte.ruta, reporte.disponible !== false)}>
                     <p className="text-color-secondary line-height-3 mb-0">
                         {reporte.descripcion}
                     </p>
                 </Card>
-            </div>
+            </div> 
         );
     };
 

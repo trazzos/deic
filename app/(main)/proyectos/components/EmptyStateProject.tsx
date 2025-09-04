@@ -1,11 +1,15 @@
 import React from 'react';
 import { Button } from 'primereact/button';
+import { usePermissions } from '@/src/hooks/usePermissions';
 
 interface EmptyStateProjectProps {
     onAddProject: () => void;
 }
 
 const EmptyStateProject = ({ onAddProject }: EmptyStateProjectProps) => {
+    const { canCreate } = usePermissions();
+    const accessCreate = canCreate('gestion_proyectos.proyectos');
+    
     return (
         <div className="col-12">
             <div className="flex flex-column align-items-center justify-content-center p-6 bg-white border-round-lg shadow-1" 
@@ -19,12 +23,12 @@ const EmptyStateProject = ({ onAddProject }: EmptyStateProjectProps) => {
                 <p className="text-gray-500 text-center mb-4 max-w-md">
                     Comienza creando tu primer proyecto para organizar y gestionar tus actividades de manera eficiente.
                 </p>
-                <Button 
+                { accessCreate && (<Button 
                     label="Crear primer proyecto" 
                     icon="pi pi-plus"
                     onClick={onAddProject}
                     className="p-button-lg"
-                />
+                />)}
             </div>
         </div>
     );

@@ -227,12 +227,13 @@ export default function RolesPage() {
 	// useEffect para cargar datos al montar el componente
 	React.useEffect(() => {
 		fetchInitialData();
-	}, []);	
+	}, [fetchInitialData]);
 
 	// Cleanup de timeouts al desmontar el componente
 	React.useEffect(() => {
+		const currentTimeouts = debounceTimeoutRef.current;
 		return () => {
-			Object.values(debounceTimeoutRef.current).forEach(timeout => {
+			Object.values(currentTimeouts).forEach(timeout => {
 				if (timeout) clearTimeout(timeout);
 			});
 		};

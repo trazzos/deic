@@ -97,11 +97,6 @@ export default function ReportesPage() {
         { label: 'Proyectos' }
     ];
 
-    useEffect(() => {
-        cargarCatalogos();
-        cargarReporteProyectos();
-    }, []);
-
     const cargarCatalogos = async () => {
         try {
             const [tiposResponse, deptosResponse] = await Promise.all([
@@ -164,6 +159,13 @@ export default function ReportesPage() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        cargarCatalogos();
+        cargarReporteProyectos();
+    }, []);
+
+    
 
     const aplicarFiltros = () => {
         cargarReporteProyectos();

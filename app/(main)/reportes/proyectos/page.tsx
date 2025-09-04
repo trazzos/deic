@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from 'primereact/button';
 import { Card } from 'primereact/card';
 import { Calendar } from 'primereact/calendar';
@@ -54,11 +54,6 @@ export default function ReportesPage() {
         { label: 'Proyectos' }
     ];
 
-    useEffect(() => {
-        cargarCatalogos();
-        cargarReporteProyectos();
-    }, []);
-
     const cargarCatalogos = async () => {
         try {
             const [tiposResponse] = await Promise.all([
@@ -78,7 +73,7 @@ export default function ReportesPage() {
         }
     };
 
-    const cargarReporteProyectos = async () => {
+    const cargarReporteProyectos = useCallback(async () => {
         setLoading(true);
         try {
             const response = await ReporteService.getReporteActividadesAgrupadoPorTipoProyecto(filtros);
@@ -89,7 +84,14 @@ export default function ReportesPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [showError, filtros]);
+
+    useEffect(() => {
+        cargarCatalogos();
+        cargarReporteProyectos();
+    }, [cargarReporteProyectos]);
+
+    
 
     const aplicarFiltros = () => {
         cargarReporteProyectos();

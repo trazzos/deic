@@ -92,9 +92,9 @@ export const usuarioSchema = Yup.object().shape({
         }),
 })
 
-
-export default {
+const personaSchema = {
     formularioSchema,
     usuarioSchema
 }
 
+export default personaSchema

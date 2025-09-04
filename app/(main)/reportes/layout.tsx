@@ -1,6 +1,6 @@
 'use client';
-import { useAuth } from '@/layout/context/authContext';
-import { PermissionGuard } from '@/src/components/PermissionGuard';
+import PermissionGuard from "@/src/components/PermissionGuard";
+import AccessDenied from "@/src/components/AccessDenied";
 
 export default function ReportesLayout({
     children,
@@ -8,7 +8,9 @@ export default function ReportesLayout({
     children: React.ReactNode;
 }) {
     return (
-        <PermissionGuard permission="reportes.ver">
+        <PermissionGuard 
+                permission="reportes"
+                fallback={<AccessDenied message="No tienes acceso a esta modulo"/>}>
             {children}
         </PermissionGuard>
     );
