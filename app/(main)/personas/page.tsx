@@ -16,6 +16,8 @@ import { Dialog } from "primereact/dialog";
 import { Password } from "primereact/password";
 import { Tag } from "primereact/tag";
 import { MultiSelect } from "primereact/multiselect";
+import { FileUpload } from "primereact/fileupload";
+import { Avatar } from "primereact/avatar";
 
 // Components
 import PermissionGuard from "@/src/components/PermissionGuard";
@@ -70,9 +72,11 @@ const PersonasPage = () => {
         responsable_departamento: false,
         email: '',
         password: '',
-        password_confirmation: ''
+        password_confirmation: '',
+        fotografia: null // Nuevo campo para la fotografía
     });
     const [formularioErrors, setFormularioErrors] = useState<{ [key: string]: string }>({});
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
     const { showError, showSuccess } = useNotification();
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
@@ -142,6 +146,20 @@ const PersonasPage = () => {
 
         loadInitialData();
     }, [showError]);
+
+    // Cleanup de URLs del preview cuando cambia la fotografía
+    useEffect(() => {
+        if (formularioPersona.fotografia) {
+            const url = URL.createObjectURL(formularioPersona.fotografia);
+            setPreviewUrl(url);
+            
+            return () => {
+                URL.revokeObjectURL(url);
+            };
+        } else {
+            setPreviewUrl(null);
+        }
+    }, [formularioPersona.fotografia]);
 
     const handleFormularioChange = (e: any) => {
 
@@ -255,21 +273,43 @@ const PersonasPage = () => {
             setFormularioErrors({});
 
             // el payload que se envia excluye secretaria_id, subsecretaria_id, direccion_id, departamento_id, en ves de eso envia dependencia_id, dependiendo de que se seleccione en dependencia_type
-            const { secretaria_id, subsecretaria_id, direccion_id, departamento_id, ...resto } = formularioPersona;
+            const { secretaria_id, subsecretaria_id, direccion_id, departamento_id, fotografia, ...resto } = formularioPersona;
             const contexto = {
                 ...resto,
                 es_titular: formularioPersona.es_titular ? 'Si' : 'No'
             }
+
+            // Si hay fotografía, usar FormData, sino enviar JSON normal
+            let payload: any;
+
+            if (fotografia) {
+                // Crear FormData para envío con fotografía
+                payload = new FormData();
+                Object.keys(contexto).forEach(key => {
+                    if (contexto[key] !== null && contexto[key] !== undefined) {
+                        payload.append(key, contexto[key].toString());
+                    }
+                });
+
+                if (formularioPersona.id) {
+                    payload.append('_method', 'PATCH'); // Para soporte en update
+                }
+
+                payload.append('fotografia', fotografia);
+            } else {
+                // Envío normal sin fotografía
+                payload = contexto;
+            }
             
             const response: any = formularioPersona.id
-                ? await PersonaService.updatePersona(formularioPersona.id, contexto)
-                : await PersonaService.createPersona(contexto);
+                ? await PersonaService.updatePersona(formularioPersona.id, payload)
+                : await PersonaService.createPersona(payload);
 
             const persona = await response.data;
 
             updateRows(persona);
             showSuccess('El registro se ha guardado correctamente');
-            setVisibleFormulario(false);
+            closeFormulario();
 
         } catch (err: any) {
             
@@ -303,6 +343,7 @@ const PersonasPage = () => {
            direccion_id:null,
            departamento_id:null,
            es_titular: data.es_titular === 'Si',
+           fotografia: null // Reset fotografía en edición
         }));
  
         switch(data.dependencia_type) {
@@ -417,6 +458,15 @@ const PersonasPage = () => {
         setFiltroDepartamentosFiltrados([]);
     }
 
+    const closeFormulario = () => {
+        // Limpiar URL del preview si existe
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(null);
+        }
+        setVisibleFormulario(false);
+    };
+
     const onAgregar = () => {
         setFormularioPersona({
             id: null,
@@ -432,7 +482,8 @@ const PersonasPage = () => {
             es_titular: false,
             email: '',
             password: '',
-            password_confirmation: ''   
+            password_confirmation: '',
+            fotografia: null   
         });
         
         // Limpiar listas jerárquicas filtradas
@@ -706,10 +757,28 @@ const PersonasPage = () => {
     });
 
     const bodyNombre = (rowData:Persona) => {  
+        // Generar iniciales del nombre completo
+        const iniciales = `${rowData.nombre?.charAt(0) || ''}${rowData.apellido_paterno?.charAt(0) || ''}`.toUpperCase();
+        
         return (
-            <span>
-                {rowData.nombre} {rowData.apellido_paterno} {rowData.apellido_materno}
-            </span>
+            <div className="flex align-items-center gap-2">
+                <Avatar 
+                    image={rowData.public_url_fotografia || undefined}
+                    label={!rowData.public_url_fotografia ? iniciales : undefined}
+                    size="normal"
+                    shape="circle"
+                    className="flex-shrink-0"
+                    style={{ 
+                        backgroundColor: !rowData.public_url_fotografia ? '#6366f1' : undefined,
+                        color: !rowData.public_url_fotografia ? 'white' : undefined,
+                        width: '32px',
+                        height: '32px'
+                    }}
+                />
+                <span className="font-medium">
+                    {rowData.nombre} {rowData.apellido_paterno} {rowData.apellido_materno}
+                </span>
+            </div>
         );
     }
 
@@ -983,7 +1052,7 @@ const PersonasPage = () => {
                     </div>
                     <Sidebar 
                         visible={visibleFormulario} 
-                        onHide={() => setVisibleFormulario(false)} 
+                        onHide={() => closeFormulario()} 
                         baseZIndex={1000} 
                         position="right"
                         modal={true}
@@ -1148,6 +1217,84 @@ const PersonasPage = () => {
                                             <small className='text-red-600'>{formularioErrors.es_titular}</small>
                                         )}
                                     </div> 
+
+                                    {/* Campo de fotografía - Opcional */}
+                                    <div className="flex flex-column gap-2">
+                                        <label className='font-medium'>Fotografía (Opcional)</label>
+                                        
+                                        {/* Vista previa del avatar */}
+                                        <div className="flex align-items-center gap-3 mb-2">
+                                            <Avatar 
+                                                image={previewUrl || selectedPersona?.public_url_fotografia || undefined}
+                                                label={!previewUrl && !selectedPersona?.public_url_fotografia ? 
+                                                    `${formularioPersona.nombre?.charAt(0) || ''}${formularioPersona.apellido_paterno?.charAt(0) || ''}`.toUpperCase() : 
+                                                    undefined
+                                                }
+                                                size="large"
+                                                shape="circle"
+                                                style={{ 
+                                                    backgroundColor: !previewUrl && !selectedPersona?.public_url_fotografia ? '#6366f1' : undefined,
+                                                    color: !previewUrl && !selectedPersona?.public_url_fotografia ? 'white' : undefined,
+                                                    width: '64px',
+                                                    height: '64px'
+                                                }}
+                                            />
+                                            <div className="flex flex-column">
+                                                <span className="font-medium">
+                                                    {formularioPersona.nombre || 'Nombre'} {formularioPersona.apellido_paterno || 'Apellidos'}
+                                                </span>
+                                                <small className="text-500">Vista previa</small>
+                                            </div>
+                                        </div>
+
+                                        <FileUpload
+                                            mode="basic"
+                                            name="fotografia"
+                                            accept="image/*"
+                                            maxFileSize={2000000} // 2MB
+                                            auto={false}
+                                            chooseLabel="Seleccionar foto"
+                                            className="p-button-outlined"
+                                            customUpload={true}
+                                            onSelect={(e) => {
+                                                const file = e.files[0];
+                                                if (file) {
+                                                    setFormularioPersona((prev: any) => ({
+                                                        ...prev,
+                                                        fotografia: file
+                                                    }));
+                                                }
+                                            }}
+                                            onRemove={() => {
+                                                setFormularioPersona((prev: any) => ({
+                                                    ...prev,
+                                                    fotografia: null
+                                                }));
+                                            }}
+                                            onClear={() => {
+                                                setFormularioPersona((prev: any) => ({
+                                                    ...prev,
+                                                    fotografia: null
+                                                }));
+                                            }}
+                                        />
+                                        {formularioPersona.fotografia && (
+                                            <div className="flex align-items-center gap-2 mt-2">
+                                                <i className="pi pi-check-circle text-green-600"></i>
+                                                <small className="text-green-600">
+                                                    Nueva foto seleccionada: {formularioPersona.fotografia.name}
+                                                </small>
+                                            </div>
+                                        )}
+                                        {selectedPersona?.public_url_fotografia && !formularioPersona.fotografia && (
+                                            <div className="flex align-items-center gap-2 mt-2">
+                                                <i className="pi pi-image text-blue-600"></i>
+                                                <small className="text-blue-600">
+                                                    Foto actual del sistema
+                                                </small>
+                                            </div>
+                                        )}
+                                    </div> 
                                     
                                     {!formularioPersona.id && (
                                         <>
@@ -1193,7 +1340,7 @@ const PersonasPage = () => {
                                             icon="pi pi-times"
                                             severity='danger'
                                             disabled={loadingGuardar} 
-                                            onClick={() => setVisibleFormulario(false)}>
+                                            onClick={() => closeFormulario()}>
                                     </Button>
                                     <Button label="Guardar" 
                                             icon="pi pi-save"

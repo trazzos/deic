@@ -11,6 +11,7 @@ export interface Persona {
     cuenta_activa?: boolean;     
     password: string | null;
     password_confirmation: string | null;
+    public_url_fotografia?: string | null;
 }
 export interface Usuario {
     email: string | null;     
