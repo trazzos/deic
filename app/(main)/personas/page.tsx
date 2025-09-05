@@ -487,8 +487,8 @@ const PersonasPage = () => {
 
     const renderToolbar = () => {
         return (
-            <div className="mb-4 p-3 bg-white border-round-lg shadow-1 border-1 surface-border">
-                <div className="flex justify-content-between align-items-center mb-3">
+            <div className="mb-3 p-3 bg-white border-round-lg shadow-1 border-1 surface-border">
+                <div className="flex justify-content-between align-items-center mb-2">
                     <div className="flex gap-2 align-items-center">
                         <Button
                             type="button"
@@ -725,13 +725,13 @@ const PersonasPage = () => {
         return (    
             <div className="flex flex-column items-align-center gap-2">
                 <div className="flex flex-1 gap-2">
-                    <span className="text-surface-200  text-sm">Tipo:</span>
-                    <span className="text-surface-600 font-bold text-sm">{rowData.dependencia_type}</span>
+                    <span className="text-surface-200 font-bold text-sm">Tipo:</span>
+                    <span className="text-surface-600 text-sm">{rowData.dependencia_type}</span>
                 </div>
                 {['Secretaria', 'Subsecretaria', 'Direccion', 'Departamento'].includes(rowData.dependencia_type ?? '') && (
                     <div className="flex flex-1 gap-1">
-                        <span className="text-surface-200 text-sm">Nombre:</span>
-                        <span className="text-surface-600 font-medium text-sm">{rowData.nombre_dependencia}</span>
+                        <span className="text-surface-200 font-bold text-sm">Nombre:</span>
+                        <span className="text-surface-600 text-sm">{rowData.nombre_dependencia}</span>
                     </div>
                 )}
             </div>

@@ -21,6 +21,7 @@ import FormularioProyecto from './FormularioProyecto';
 import EmptyStateProject from './components/EmptyStateProject';
 import EmptyStateActivity from './components/EmptyStateActivity';
 import RepositorioDocumentos from './components/RepositorioDocumentos';
+import FiltroProyectos from './components/FiltroProyectos';
 import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 import PermissionGuard from "@/src/components/PermissionGuard";
 import AccessDenied from "@/src/components/AccessDenied";
@@ -31,62 +32,11 @@ import {
     DependenciaProyectoService,
 } from '@/src/services';
 import type { Proyecto } from '@/types';
+import { schemaProyecto, schemaActividad } from '@/src/schemas/proyecto';
 import { useNotification } from '@/layout/context/notificationContext';
 import { useFormErrorHandler } from '@/src/utils/errorUtils';
 import { usePermissions } from "@/src/hooks/usePermissions";
 
-const schemaActividad = Yup.object().shape({
-    uuid: Yup.string().nullable(),
-    nombre: Yup.string().required('El nombre es obligatorio'),
-    tipo_actividad_id: Yup.number().required('El tipo de actividad es obligatorio'),
-    capacitador_id: Yup.number().nullable(),
-    beneficiario_id: Yup.number().required('El beneficiario es obligatorio'),
-    responsable_id: Yup.number().required('El responsable es obligatorio'),
-    fecha_inicio: Yup.date().required('La fecha de inicio es obligatoria'),
-    fecha_fin: Yup.date().required('La fecha de fin es obligatoria'),
-    persona_beneficiada: Yup.array()
-        .of(
-            Yup.object({
-                nombre: Yup.string().oneOf(['Hombre','Mujer','Otro']).required(),
-                total: Yup.number().integer('Debe ser un entero').min(0, 'No puede ser negativo').required()
-            })
-        )
-        .required('El campo persona beneficiada es obligatorio')
-        .test('contiene-tres-tipos', 'Debe incluir Hombre, Mujer y Otro', (arr:any) => {
-            if (!Array.isArray(arr)) return false;
-            const nombres = arr.map((i:any) => i?.nombre);
-            return ['Hombre','Mujer','Otro'].every(t => nombres.includes(t));
-        }),
-    prioridad: Yup.string().required('La prioridad es obligatoria'),
-    autoridad_participante: Yup.array()
-        .of(Yup.number())
-        .nullable(),
-    link_drive: Yup.string().url('Debe ser una URL válida').nullable(),
-    fecha_solicitud_constancia: Yup.date().nullable(),
-    fecha_envio_constancia: Yup.date().nullable(),
-    fecha_vencimiento_envio_encuesta: Yup.date().nullable(),
-    fecha_envio_encuesta: Yup.date().nullable(),
-    fecha_inicio_difusion_banner: Yup.date().nullable(),
-    fecha_fin_difusion_banner: Yup.date().nullable(),
-    link_registro: Yup.string().url('Debe ser una URL válida').nullable(),
-    registro_nafin: Yup.string().nullable(),
-    link_zoom: Yup.string().url('Debe ser una URL válida').nullable(),
-    link_panelista: Yup.string().url('Debe ser una URL válida').nullable(),
-    comentario: Yup.string().nullable(),
-    documento: Yup.array().of(Yup.object().shape({
-        name: Yup.string().required('El nombre del archivo es obligatorio'),
-        size: Yup.number().required('El tamaño del archivo es obligatorio'),
-        type: Yup.string().required('El tipo de archivo es obligatorio'),
-        lastModified: Yup.number().required('La fecha de modificación es obligatoria'),
-    })).nullable(),
-});
-
-const schemaProyecto = Yup.object().shape({
-    tipoProyecto: Yup.string().required('El tipo de proyecto es obligatorio'),
-    departamento: Yup.string().required('El departamento es obligatorio'),
-    nombre: Yup.string().required('El nombre es obligatorio'),
-    descripcion: Yup.string().required('La descripción es obligatoria'),
-});
 
 const tiposBeneficiados = [
     { label: 'Hombre', value: 'Hombre' },
@@ -136,11 +86,20 @@ const ProyectoPage = () => {
     const [visibleRepositorioDocumentos, setVisibleRepositorioDocumentos] = useState(false);
 
     const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(15);
+    const [perPage, setPerPage] = useState(5);
     const [hasMore, setHasMore] = useState(true);
     const [openPanelActividad, setOpenPanelActividad] = useState(false);
     const [openPanelProyecto, setOpenPanelProyecto] = useState(false);
     const [showDetailPanel, setShowDetailPanel] = useState(true);
+
+    // Estados para filtros
+    const [showFilters, setShowFilters] = useState(false);
+    const [filtros, setFiltros] = useState({
+        tipoProyecto: null,
+        departamento: null,
+        estatus: null
+    });
+    const [proyectosFiltrados, setProyectosFiltrados] = useState<any[]>([]);
 
     // Proyectos
     const [proyectoActivo, setProyectoActivo] = useState<any>({});
@@ -519,16 +478,36 @@ const ProyectoPage = () => {
         setLoading(true);
 
         try {
-                const response = await ProyectoService.paginateProyecto(page + 1, perPage);
-                if (response.data.length === 0) {
-                    setHasMore(false);
-                } else {
-                    setProyectos(prev => [...prev, ...response.data]);
-                    setPage(prev => prev + 1);
-                }
-            } finally {
-                setLoading(false);
+            // Construir parámetros incluyendo filtros activos
+            const params: any = {
+                page: page + 1,
+                per_page: perPage
+            };
+            
+            // Agregar filtros si están activos
+            if (filtros.tipoProyecto) {
+                params.tipo_proyecto_id = filtros.tipoProyecto;
             }
+            if (filtros.departamento) {
+                params.departamento_id = filtros.departamento;
+            }
+            if (filtros.estatus) {
+                params.estatus = filtros.estatus;
+            }
+            
+            const response = await ProyectoService.paginateProyecto(params);
+            
+            if (response.data.length === 0) {
+                setHasMore(false);
+            } else {
+                setProyectos(prev => [...prev, ...response.data]);
+                setPage(prev => prev + 1);
+                // Si devolvió menos registros que perPage, no hay más páginas
+                setHasMore(response.data.length >= perPage);
+            }
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleResetControlsProyecto  = () => {
@@ -536,6 +515,7 @@ const ProyectoPage = () => {
         setFormularioErrors({});
         setVisibleFormulario(false);
         setProyectoActivo({});
+        setShowDetailPanel(false);
         // No resetear proyectosCargados aquí para mantener el caché de avance
     };
 
@@ -801,7 +781,7 @@ const ProyectoPage = () => {
                     responseProyectos
                 ] = await Promise.all([
                     DependenciaProyectoService.getAll(),
-                    ProyectoService.paginateProyecto(page, perPage)
+                    ProyectoService.paginateProyecto({ page: 1, per_page: perPage })
                 ]);
 
                 // Extraer los catálogos de la respuesta de dependencias
@@ -822,6 +802,8 @@ const ProyectoPage = () => {
                 
                 // Actualizar proyectos
                 setProyectos(responseProyectos.data);
+                // Configurar hasMore: si devolvió menos registros que perPage, no hay más
+                setHasMore(responseProyectos.data.length >= perPage);
             } catch (error: any) {
                 showError(error.message || 'Ha ocurrido un error al cargar los datos');
             } finally {
@@ -1006,7 +988,7 @@ const ProyectoPage = () => {
     }
 
     const onDoubleClickTareaActividad = async (e:any, actividad:any, tarea:any) => {   
-        if(!accessEditTarea)
+        if(!accessEditTarea || !actividad.can_be_worked)
             return;
 
         e.preventDefault();
@@ -1102,6 +1084,77 @@ const ProyectoPage = () => {
         );
     };
 
+    // Funciones para manejo de filtros de proyectos
+    const handleFiltroChange = async (filtro: string, valor: any) => {
+        const nuevosFiltros = { ...filtros, [filtro]: valor };
+        setFiltros(nuevosFiltros);
+        handleResetControlsProyecto();
+        handleResetControlsActividad();
+        await cargarProyectosFiltrados(nuevosFiltros);
+    };
+
+    const limpiarFiltros = async () => {
+        const filtrosLimpios = {
+            tipoProyecto: null,
+            departamento: null,
+            estatus: null
+        };
+        setFiltros(filtrosLimpios);
+        // Recargar todos los proyectos sin filtros
+        setLoading(true);
+        //limpoar controles de proyecto y actividad
+        handleResetControlsProyecto();
+        handleResetControlsActividad();
+        try {
+            const response = await ProyectoService.paginateProyecto({
+                page: 1,
+                per_page: perPage
+            });
+            setProyectos(response.data);
+            setPage(1);
+            setHasMore(response.data.length >= perPage);
+        } catch (error: any) {
+            showError(error.message || 'Error al limpiar filtros');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const cargarProyectosFiltrados = async (filtrosAplicar: any = filtros) => {
+        setLoading(true);
+        try {
+            // Construir parámetros para la API
+            const params: any = {
+                page: 1,
+                per_page: perPage
+            };
+            
+            // Agregar filtros si están presentes
+            if (filtrosAplicar.tipoProyecto) {
+                params.tipo_proyecto_id = filtrosAplicar.tipoProyecto;
+            }
+            if (filtrosAplicar.departamento) {
+                params.departamento_id = filtrosAplicar.departamento;
+            }
+            if (filtrosAplicar.estatus) {
+                params.estatus = filtrosAplicar.estatus;
+            }
+            
+            // Llamar a la API con los filtros
+            const response = await ProyectoService.paginateProyecto(params);
+            setProyectos(response.data);
+            
+            // Reset de paginación cuando se aplican filtros
+            setPage(1);
+            // Determinar si hay más páginas: si devolvió menos registros que perPage, no hay más
+            setHasMore(response.data.length >= perPage);
+        } catch (error: any) {
+            showError(error.message || 'Error al cargar proyectos filtrados');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Funciones para manejo de documentos
     const handleUploadDocumento = async (file: File, tipoDocumento: any) => {
         try {
@@ -1169,6 +1222,7 @@ const ProyectoPage = () => {
 
     // Custom templates 
     const headerPanelActividad = (options: any, data: any) => {
+        console.log('Rendering headerPanelActividad for activity:', data);
         const className = `${options.className} flex align-items-center gap-2`;
         const actividadCompletada = isActividadCompletada(data.uuid, proyectoActivo?.uuid);
         const avanceActividad = calcularAvanceActividad(data.uuid, proyectoActivo?.uuid);
@@ -1207,7 +1261,18 @@ const ProyectoPage = () => {
                     <span className="font-bold text-ellipsis overflow-hidden whitespace-nowrap flex-grow-1" 
                           title={data.nombre}>
                         {data.nombre}
+                        {/* Leyenda de solo lectura */}
+                        { !data.can_be_worked && (
+                            <div className="flex align-items-center gap-1 flex-shrink-0" 
+                                title="Actividad en modo solo lectura - No se pueden agregar, editar o eliminar tareas">
+                                <i className="pi pi-lock text-xs text-gray-500"></i>
+                                <span className="text-xs text-gray-500 font-medium">Sin acceso, solo lectura</span>
+                            </div>
+                        )}
                     </span>
+                    
+                    
+                    
                     {!hayTareasCargadas && typeof data.porcentaje_avance === 'number' && (
                         <i className="pi pi-database text-xs text-gray-400 flex-shrink-0" 
                            title="Avance calculado por el servidor"></i>
@@ -1300,7 +1365,7 @@ const ProyectoPage = () => {
                             </p>
                         )}
                         
-                        <div className="mb-3">
+                        <div className="mb-2">
                             <div className="flex align-items-center justify-content-between mb-1">
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                     Progreso
@@ -1334,13 +1399,6 @@ const ProyectoPage = () => {
                                         className="text-xs px-2 py-1"
                                     />
                                 )}
-                                {proyecto.departamento_nombre && (
-                                    <Tag 
-                                        value={proyecto.departamento_nombre} 
-                                        severity="warning" 
-                                        className="text-xs px-2 py-1"
-                                    />
-                                )}
                             </div>
                             
                             {isActive && (
@@ -1350,9 +1408,36 @@ const ProyectoPage = () => {
                                 </div>
                             )}
                         </div>
+                        <div className="flex align-items-center justify-content-between mt-2">
+                            {proyecto.departamento_nombre && (
+                                    <Tag 
+                                        value={proyecto.departamento_nombre} 
+                                        severity="warning" 
+                                        className="text-xs px-2 py-1"
+                                    />
+                                )}
+                        </div>
                     </div>
                 </div>
             </div>
+        );
+    };
+
+    const renderToolbar = () => {
+        return (             
+            <FiltroProyectos
+                visible={showFilters}
+                onToggle={() => setShowFilters(!showFilters)}
+                filtros={filtros}
+                onFiltroChange={handleFiltroChange}
+                onLimpiarFiltros={limpiarFiltros}
+                accessAddProject={accessCreateProyecto}
+                onAddProject={onAgregar}
+                tiposProyecto={tiposProyecto}
+                departamentos={departamentos}
+                totalRegistros={proyectos.length}
+            />
+
         );
     };
 
@@ -1377,22 +1462,21 @@ const ProyectoPage = () => {
                         description="Administra y supervisa todos los proyectos activos"
                         icon="pi pi-briefcase"
                     />
+                    {renderToolbar()}
                 </div>
-                        
+                 
                 {proyectos.length === 0 && !loading ? (
                     <EmptyStateProject onAddProject={onAgregar} />
                 ) : (
                     <>
+                        {/* Panel de proyectos */}
                         <div className="col-12 md:col-4">
                             <div className="w-full bg-white border border-gray-200 border-round shadow-8 md:shadow-1 dark:bg-gray-800 dark:border-gray-700">
-                                { accessCreateProyecto && (<div className="flex items-center py-4 px-4 justify-content-center border-bottom-1 border-gray-200 dark:border-gray-700">
-                                    <Button icon="pi pi-plus" label='Agregar proyecto' onClick={onAgregar}></Button>
-                                </div>)}
                                 <DataScroller
                                     value={proyectos}
                                     emptyMessage="No hay proyectos disponibles"
                                     itemTemplate={proyectoTemplate}
-                                    rows={perPage}
+                                    rows={proyectos.length || perPage}
                                     inline
                                     pt={{
                                         content: { className: 'border-none' },
@@ -1403,7 +1487,7 @@ const ProyectoPage = () => {
                                         <div className="flex align-items-center justify-content-between p-3 bg-gray-50 dark:bg-gray-900 border-bottom-1 border-gray-200 dark:border-gray-700">
                                             <div className="flex align-items-center gap-2">
                                                 <i className="pi pi-list text-primary-600"></i>
-                                                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                                <span className="font-semibold text-primary-700 dark:text-primary-300">
                                                     Proyectos ({proyectos.length})
                                                 </span>
                                             </div>
@@ -1470,19 +1554,19 @@ const ProyectoPage = () => {
                         {/* Panel de actividades */}
                         <div className={`col-12 ${(openPanelProyecto || openPanelActividad) && showDetailPanel ? 'md:col-4' : 'md:col-8'}`}>
                             {(proyectoActivo.uuid && !loadingActividadesProyecto) && (
-                                <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800 dark:border-gray-700">
-                                    <div className="flex flex-column gap-3 p-4 border-bottom-1 surface-border">
+                                <div className="w-full max-w-md bg-white border-round-lg shadow-md shadow-1 dark:bg-gray-800 dark:border-gray-700">
+                                    <div className="flex flex-column gap-3 p-3 border-bottom-1 surface-border">
                                         <div className="flex align-items-center justify-content-between w-full">
                                             <div className="flex align-items-center gap-2">
-                                                <i className="pi pi-list text-primary text-xl"></i>
-                                                <h2 className="m-0 text-primary font-semibold text-xl">Actividades</h2>
+                                                <i className="pi pi-list text-primary"></i>
+                                                <span className="m-0  text-primary-700 dark:text-primary-300 font-semibold">Actividades</span>
                                             </div>
                                             <div className="flex align-items-center gap-3">
                                                 <div className="flex align-items-center gap-2 px-3 py-1 border-round bg-primary-50 dark:bg-primary-900">
                                                     <span className="text-sm text-primary-700 dark:text-primary-100">
                                                         {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length}
                                                     </span>
-                                                    <div className="text-lg font-bold text-primary-800 dark:text-primary-200">
+                                                    <div className="text-md font-bold text-primary-800 dark:text-primary-200">
                                                         {calcularAvanceProyecto()}%
                                                     </div>
                                                 </div>
@@ -1528,7 +1612,7 @@ const ProyectoPage = () => {
                                         
                                         {actividades.map((actividad:any) => (
                                             <Panel
-                                                toggleable={accessManageTareas}
+                                                toggleable={accessManageTareas && actividad.can_be_worked}
                                                 collapsed={actividadCollapsed[actividad.uuid] !== undefined ? actividadCollapsed[actividad.uuid] : true}
                                                 headerTemplate={(options) => headerPanelActividad(options, actividad)}
                                                 expandIcon="pi pi-chevron-down"
@@ -1546,7 +1630,7 @@ const ProyectoPage = () => {
                                                     <ul className='list-none p-0 m-0 flex flex-column gap-2'>
                                                         {(tareasPorActividad[actividad.uuid] || []).map((tarea: any) => (
                                                             <li key={tarea.id} className="flex align-items-center gap-2 p-2 border-round hover:surface-100 transition-colors transition-duration-150">
-                                                                {accessCompleteTarea && (
+                                                                {(accessCompleteTarea && actividad.can_be_worked) && (
                                                                     <Checkbox   
                                                                     checked={tarea.estatus === 'Completada'}
                                                                     onChange={() => onChangeEstatusActividad(actividad, tarea)}
@@ -1571,7 +1655,7 @@ const ProyectoPage = () => {
                                                                         {tarea.nombre}
                                                                     </span>
                                                                 )}
-                                                                {accessDeleteTarea && (
+                                                                {(accessDeleteTarea && actividad.can_be_worked) && (
                                                                     <Button
                                                                         icon="pi pi-times"
                                                                         severity="danger"
@@ -1583,7 +1667,7 @@ const ProyectoPage = () => {
                                                                 )}
                                                             </li>
                                                         ))}
-                                                        {(loadingTareasActividad[actividad.uuid] === false && accessCreateTarea) && (
+                                                        {(loadingTareasActividad[actividad.uuid] === false && (accessCreateTarea || actividad.can_be_worked)) && (
                                                             <li className="flex items-center gap-2 p-2">
                                                                     <InputText
                                                                         placeholder="Nueva tarea..."
@@ -1627,10 +1711,10 @@ const ProyectoPage = () => {
                         {(openPanelProyecto || openPanelActividad) && showDetailPanel && (
                             <div className='col-12 md:col-4'>
                                 { (actividadSeleccionada.uuid && openPanelActividad) && (
-                                    <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800">
-                                        <div className="p-4 border-bottom-1 surface-border">
-                                            <div className="flex align-items-center justify-content-between mb-2">
-                                                <h2 className="text-xl font-bold m-0 text-primary">{actividadSeleccionada.nombre}</h2>
+                                    <div className="w-full max-w-md bg-white border-round-lg shadow-md shadow-1 dark:bg-gray-800">
+                                        <div className="p-3 border-bottom-1 surface-border">
+                                            <div className="flex align-items-center justify-content-between">
+                                                <span className="font-bold m-0 text-primary-700 dark:text-primary-300">{actividadSeleccionada.nombre}</span>
                                                 <Tag value={actividadSeleccionada.prioridad} 
                                                     severity={
                                                         actividadSeleccionada.prioridad === 'Alta' 
@@ -1804,7 +1888,7 @@ const ProyectoPage = () => {
                                             {/* Actions Section */}
                                             <div className="border-top-1 surface-border pt-4">
                                                 <div className="grid">
-                                                    {accessDeleteActividad && (
+                                                    {(accessDeleteActividad && actividadSeleccionada.can_be_worked) && (
                                                         <div className="col-6">
                                                             <Button
                                                                 icon="pi pi-trash"
@@ -1814,7 +1898,7 @@ const ProyectoPage = () => {
                                                                 onClick={(event) => onDeleteActividad(event, { itemData: actividadSeleccionada })}/>
                                                         </div>
                                                     )}
-                                                    {accessEditActividad && (
+                                                    {(accessEditActividad && actividadSeleccionada.can_be_worked) && (
                                                         <div className="col-6">
                                                             <Button
                                                                 icon="pi pi-pencil"
@@ -1831,10 +1915,10 @@ const ProyectoPage = () => {
                                     </div>
                                 )}
                                 {(proyectoActivo.uuid && openPanelProyecto && !openPanelActividad && !loadingActividadesProyecto) && (
-                                    <div className="w-full max-w-md bg-white border-round-lg shadow-md dark:bg-gray-800">
-                                        <div className="p-4 border-bottom-1 surface-border">
-                                            <div className="flex align-items-center justify-content-between mb-2">
-                                                <h2 className="text-xl font-bold m-0 text-primary">{proyectoActivo.nombre}</h2>
+                                    <div className="w-full max-w-md bg-white border-round-lg shadow-md shadow-1 dark:bg-gray-800">
+                                        <div className="p-3 border-bottom-1 surface-border">
+                                            <div className="flex align-items-center justify-content-between mb-1">
+                                                <span className="font-bold m-0 text-primary-700 dark:text-primary-300">{proyectoActivo.nombre}</span>
                                             </div>
                                         </div>
                                         

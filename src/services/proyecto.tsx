@@ -6,11 +6,10 @@ export const ProyectoService = {
         return http.get(`/api/proyectos`);
     },
 
-    paginateProyecto(page: number, perPage: number) {
+    paginateProyecto(params: Object) {
         return http.get(`/api/proyectos/paginate`, {
             params: {
-                page,
-                perPage
+                ...params
             }
         });
     },
