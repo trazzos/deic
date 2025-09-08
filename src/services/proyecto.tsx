@@ -87,4 +87,8 @@ export const ProyectoService = {
             responseType: 'blob' // Asegúrate de que la respuesta sea un blob
         });
     },
+
+    getDashboardEjecutivo() {
+        return http.get(`/api/proyectos/dashboard`);
+    },
 };
