@@ -74,10 +74,19 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
                 >
                     <div className="layout-topbar-profile-content">
                         <Avatar 
-                            icon="pi pi-user" 
+                            image={user?.url_img_profile || undefined}
+                            icon={!user?.url_img_profile && !user?.name ? "pi pi-user" : undefined}
+                            label={!user?.url_img_profile && user?.name ? 
+                                user.name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2) : 
+                                undefined
+                            }
                             shape="circle" 
                             size="normal" 
                             className="layout-topbar-avatar"
+                            style={{
+                                backgroundColor: !user?.url_img_profile && user?.name ? '#6366f1' : undefined,
+                                color: !user?.url_img_profile && user?.name ? 'white' : undefined
+                            }}
                         />
                         <div className="layout-topbar-profile-text">
                             <span className="layout-topbar-profile-name">{user?.name || 'Usuario'}</span>
@@ -89,7 +98,21 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
 
                 <OverlayPanel ref={profilePanelRef} className="p-3" style={{ minWidth: 280, borderRadius: 16 }}>
                     <div className="flex flex-column align-items-center gap-2 mb-3">
-                        <Avatar icon="pi pi-user" shape="circle" size="xlarge" className="bg-primary-100 text-primary-700 mb-2" />
+                        <Avatar 
+                            image={user?.url_img_profile || undefined}
+                            icon={!user?.url_img_profile && !user?.name ? "pi pi-user" : undefined}
+                            label={!user?.url_img_profile && user?.name ? 
+                                user.name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2) : 
+                                undefined
+                            }
+                            shape="circle" 
+                            size="xlarge" 
+                            className="mb-2"
+                            style={{
+                                backgroundColor: !user?.url_img_profile && user?.name ? '#6366f1' : (!user?.url_img_profile ? '#e2e8f0' : undefined),
+                                color: !user?.url_img_profile && user?.name ? 'white' : (!user?.url_img_profile ? '#6366f1' : undefined)
+                            }}
+                        />
                         <span className="font-bold text-lg text-primary-800">{user?.name || 'Usuario'}</span>
                         <span className="text-600 text-sm">{user?.email || ''}</span>
                         {userRoles && userRoles.length > 0 && (
