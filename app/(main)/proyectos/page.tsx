@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import * as Yup from 'yup';
+import jsPDF from 'jspdf';
 
 import { ProgressBar } from 'primereact/progressbar';
 import { Panel } from 'primereact/panel';
@@ -237,6 +238,301 @@ const ProyectoPage = () => {
         ).length;
         
         return Math.round((actividadesCompletadas / actividadesDelProyecto.length) * 100);
+    };
+
+    // Función para verificar si una actividad está vencida
+    const isActividadVencida = (actividad: any): boolean => {
+        if (!actividad.fecha_fin) return false;
+        
+        const fechaFin = new Date(actividad.fecha_fin);
+        const fechaActual = new Date();
+        
+        // Comparar solo fechas (sin horas)
+        fechaFin.setHours(23, 59, 59, 999);
+        fechaActual.setHours(0, 0, 0, 0);
+        
+        return fechaActual > fechaFin;
+    };
+
+    // Función para ordenar actividades
+    const ordenarActividades = (actividades: any[]): any[] => {
+        return [...actividades].sort((a, b) => {
+            // Primero ordenar por fecha_inicio (descendente)
+            const fechaInicioA = new Date(a.fecha_inicio || '1900-01-01');
+            const fechaInicioB = new Date(b.fecha_inicio || '1900-01-01');
+            
+            if (fechaInicioA.getTime() !== fechaInicioB.getTime()) {
+                return fechaInicioB.getTime() - fechaInicioA.getTime(); // Descendente
+            }
+            
+            // Si las fechas de inicio son iguales, ordenar por fecha_fin (descendente)
+            const fechaFinA = new Date(a.fecha_fin || '1900-01-01');
+            const fechaFinB = new Date(b.fecha_fin || '1900-01-01');
+            
+            return fechaFinB.getTime() - fechaFinA.getTime(); // Descendente
+        });
+    };
+
+    // Función para exportar actividad a PDF
+    const exportarActividadAPDF = () => {
+        if (!actividadSeleccionada?.uuid) {
+            showError('No hay actividad seleccionada para exportar');
+            return;
+        }
+
+        try {
+            const pdf = new jsPDF();
+            
+            // Configuración del documento
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            let currentY = 20;
+            const marginLeft = 20;
+            const marginRight = 20;
+            const availableWidth = pageWidth - marginLeft - marginRight;
+
+            // Helper function para agregar texto con wrap
+            const addWrappedText = (text: string, x: number, y: number, maxWidth: number, fontSize: number = 10) => {
+                pdf.setFontSize(fontSize);
+                const lines = pdf.splitTextToSize(text, maxWidth);
+                pdf.text(lines, x, y);
+                return y + (lines.length * fontSize * 0.4);
+            };
+
+            // Helper function para verificar si necesita nueva página
+            const checkNewPage = (requiredSpace: number) => {
+                if (currentY + requiredSpace > pageHeight - 20) {
+                    pdf.addPage();
+                    currentY = 20;
+                }
+            };
+
+            // Encabezado del documento
+            pdf.setFontSize(18);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('FICHA TÉCNICA DE ACTIVIDAD', pageWidth/2, currentY, { align: 'center' });
+            currentY += 15;
+
+            // Línea divisoria
+            pdf.setLineWidth(0.5);
+            pdf.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+            currentY += 10;
+
+            // Información del proyecto
+            pdf.setFontSize(14);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('INFORMACIÓN DEL PROYECTO', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+            pdf.setFont(undefined, 'normal');
+            
+            // Proyecto
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Proyecto:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(proyectoActivo?.nombre || 'N/A', marginLeft + 30, currentY, availableWidth - 30);
+            currentY += 5;
+
+            // Dependencia
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Departamento:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(proyectoActivo?.departamento_nombre || 'N/A', marginLeft + 35, currentY, availableWidth - 35);
+            currentY += 10;
+
+            checkNewPage(50);
+
+            // Información de la actividad
+            pdf.setFontSize(14);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('INFORMACIÓN DE LA ACTIVIDAD', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+            
+            // Nombre de la actividad
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Nombre:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(actividadSeleccionada.nombre || 'N/A', marginLeft + 25, currentY, availableWidth - 25);
+            currentY += 5;
+
+            // Descripción
+            if (actividadSeleccionada.descripcion) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Descripción:', marginLeft, currentY);
+                pdf.setFont(undefined, 'normal');
+                currentY = addWrappedText(actividadSeleccionada.descripcion, marginLeft + 35, currentY, availableWidth - 35);
+                currentY += 5;
+            }
+
+            // Información en dos columnas
+            const col1X = marginLeft;
+            const col2X = pageWidth / 2 + 10;
+            const colWidth = (availableWidth - 10) / 2;
+
+            checkNewPage(80);
+
+            // Fechas y estado
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('CRONOGRAMA Y ESTADO', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+
+            // Fechas
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Fecha de inicio:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString('es-ES') : 'N/A', col1X, currentY + 7);
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Fecha de fin:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString('es-ES') : 'N/A', col2X, currentY + 7);
+            currentY += 20;
+
+            // Prioridad y tipo
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Prioridad:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.prioridad || 'N/A', col1X, currentY + 7);
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Tipo de actividad:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(actividadSeleccionada.tipo_actividad_nombre || 'N/A', col2X, currentY + 7, colWidth);
+            currentY += 15;
+
+            checkNewPage(80);
+
+            // Participantes
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('PARTICIPANTES', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+
+            // Responsable
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Responsable:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.responsable_nombre || 'N/A', col1X, currentY + 7);
+
+            // Capacitador
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Capacitador:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.capacitador_nombre || 'N/A', col2X, currentY + 7);
+            currentY += 20;
+
+            // Beneficiario
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Beneficiario:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(actividadSeleccionada.beneficiario_nombre || 'N/A', marginLeft + 35, currentY, availableWidth - 35);
+            currentY += 10;
+
+            // Beneficiarios por tipo
+            if (actividadSeleccionada.persona_beneficiada && Array.isArray(actividadSeleccionada.persona_beneficiada)) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Distribución de beneficiarios:', marginLeft, currentY);
+                currentY += 7;
+
+                actividadSeleccionada.persona_beneficiada.forEach((persona: any) => {
+                    pdf.setFont(undefined, 'normal');
+                    pdf.text(`• ${persona.nombre === 'Mujer' ? 'Mujeres' : persona.nombre + 's'}: ${persona.total}`, marginLeft + 10, currentY);
+                    currentY += 5;
+                });
+                currentY += 5;
+            }
+
+            checkNewPage(60);
+
+            // Avance de tareas
+            const tareasActividad = tareasPorActividad[actividadSeleccionada.uuid] || [];
+            const tareasCompletadas = tareasActividad.filter((t: any) => t.estatus === 'Completada').length;
+            const porcentajeAvance = tareasActividad.length > 0 ? Math.round((tareasCompletadas / tareasActividad.length) * 100) : (actividadSeleccionada.porcentaje_avance || 0);
+
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('AVANCE DE ACTIVIDAD', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+
+            // Estadísticas de tareas
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Total de tareas:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(String(tareasActividad.length || actividadSeleccionada.total_tareas || 0), col1X, currentY + 7);
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Tareas completadas:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(String(tareasCompletadas || actividadSeleccionada.tareas_completadas || 0), col2X, currentY + 7);
+            currentY += 20;
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Porcentaje de avance:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`${porcentajeAvance}%`, marginLeft + 50, currentY);
+            currentY += 15;
+
+            // Lista de tareas si están cargadas
+            if (tareasActividad.length > 0) {
+                checkNewPage(40 + (tareasActividad.length * 5));
+
+                pdf.setFontSize(12);
+                pdf.setFont(undefined, 'bold');
+                pdf.text('LISTA DE TAREAS', marginLeft, currentY);
+                currentY += 8;
+
+                pdf.setFontSize(9);
+
+                tareasActividad.forEach((tarea: any, index: number) => {
+                    const status = tarea.estatus === 'Completada' ? 'Completada' : 'Pendiente';
+                    const color = tarea.estatus === 'Completada' ? [0, 128, 0] : [128, 128, 128];
+                    
+                    pdf.setTextColor(color[0], color[1], color[2]);
+                    pdf.text(`${index + 1}. ${tarea.nombre}(${status})`, marginLeft + 5, currentY);
+                    pdf.setTextColor(0, 0, 0); // Reset color
+                    currentY += 5;
+
+                    if (currentY > pageHeight - 30) {
+                        pdf.addPage();
+                        currentY = 20;
+                    }
+                });
+                currentY += 10;
+            }
+
+            // Footer con fecha de generación
+            const fechaGeneracion = new Date().toLocaleDateString('es-ES', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            pdf.setFontSize(8);
+            pdf.setTextColor(128, 128, 128);
+            pdf.text(`Documento generado el ${fechaGeneracion}`, marginLeft, pageHeight - 10);
+
+            // Guardar el PDF
+            const nombreArchivo = `Ficha_Actividad_${actividadSeleccionada.nombre.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+            pdf.save(nombreArchivo);
+
+            showSuccess('PDF generado exitosamente');
+
+        } catch (error) {
+            console.error('Error al generar PDF:', error);
+            showError('Error al generar el PDF');
+        }
     };
 
     // Funciones para gestión del caché
@@ -547,8 +843,9 @@ const ProyectoPage = () => {
         const actividadesEnCache = actividadesPorProyecto[data.uuid];
         
         if (actividadesEnCache) {
-            // Usar datos del caché
-            setActividades(actividadesEnCache);
+            // Usar datos del caché y ordenarlos
+            const actividadesOrdenadas = ordenarActividades(actividadesEnCache);
+            setActividades(actividadesOrdenadas);
             loadTareasFromCache(data.uuid);
             setLoadingActividadesProyecto(false);
         } else {
@@ -557,9 +854,10 @@ const ProyectoPage = () => {
             try {
                 const responseActividades = await ProyectoService.getListaActividadesPorProyectoUuid(data?.uuid);
                 const nuevasActividades = responseActividades.data;
+                const actividadesOrdenadas = ordenarActividades(nuevasActividades);
                 
-                setActividades(nuevasActividades);
-                updateActividadesCache(data.uuid, nuevasActividades);
+                setActividades(actividadesOrdenadas);
+                updateActividadesCache(data.uuid, actividadesOrdenadas);
                 
                 // Limpiar tareas del proyecto activo
                 setTareasPorActividad({});
@@ -839,20 +1137,24 @@ const ProyectoPage = () => {
                     updatedActividades = [...updatedActividades, data];
                 }
             }
+            
+            // Ordenar las actividades después de la actualización
+            const actividadesOrdenadas = ordenarActividades(updatedActividades);
+            
             // Actualizar caché de actividades
             if (proyectoActivo?.uuid) {
-                updateActividadesCache(proyectoActivo.uuid, updatedActividades);
+                updateActividadesCache(proyectoActivo.uuid, actividadesOrdenadas);
             }
             // Si la actividad actualizada es la seleccionada, actualizar también el estado
             if (actividadSeleccionada?.uuid === data.uuid) {
                 setActividadSeleccionada((prev:any) => ({ ...prev, ...data }));
                 setFormularioActividad((prev:any) => ({ ...prev, ...data }));
             }
-            return updatedActividades;
+            return actividadesOrdenadas;
         });
     }
 
-    const seleccionarActividad = (actividad: any) => {
+    const seleccionarActividad = async (actividad: any) => {
        
         
         if (actividad.uuid === actividadSeleccionada?.uuid) {
@@ -865,6 +1167,29 @@ const ProyectoPage = () => {
             setOpenPanelProyecto(false);
             setActividadSeleccionada({ ...actividad });
             setShowDetailPanel(true); // Show the detail panel when an activity is selected
+            
+            // Cargar las tareas si no están en caché
+            const tareasEnCache = tareasPorProyecto[proyectoActivo.uuid]?.[actividad.uuid];
+            const tareasEnEstado = tareasPorActividad[actividad.uuid];
+            
+            if (!tareasEnCache && !tareasEnEstado) {
+                // No hay tareas en caché ni en estado, cargar desde el servidor
+                setLoadingTareasActividad((prev: any) => ({ ...prev, [actividad.uuid]: true }));
+                try {
+                    const tareas = await ProyectoService.getListaTareasPorActividadUuid(proyectoActivo.uuid, actividad.uuid);
+                    const nuevasTareas = tareas.data;
+                    
+                    setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: nuevasTareas }));
+                    updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+                } catch (error) {
+                    console.error('Error al cargar tareas:', error);
+                } finally {
+                    setLoadingTareasActividad((prev: any) => ({ ...prev, [actividad.uuid]: false }));
+                }
+            } else if (tareasEnCache && !tareasEnEstado) {
+                // Hay tareas en caché pero no en estado, cargar desde caché
+                setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: tareasEnCache }));
+            }
         }
     };
 
@@ -936,7 +1261,6 @@ const ProyectoPage = () => {
 
     const onBlurTareaActividad = async (e:any, actividad:any, tarea:any) => {
         
-        e.preventDefault();
         if (tarea.editing) {
             const resUp = await ProyectoService.updateTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, tarea.id, { nombre: e.target.value });
             const updatedTarea = resUp.data;
@@ -982,7 +1306,7 @@ const ProyectoPage = () => {
         setTareasPorActividad((prev: any) => ({
             ...prev,
             [actividad.uuid]: prev[actividad.uuid].map((t: any) =>
-                t.id === tarea.id ? { ...t, editing: true } : t
+                t.id === tarea.id ? { ...t,nombre:e.target.value, editing: true } : t
             )
         }));
     }
@@ -1024,6 +1348,7 @@ const ProyectoPage = () => {
 
     const onChangeNuevaTareaActividad = async (e:any, actividad:any) => {
        
+        console.log(e.target.value);
         setNuevaTareaActividad((prev) => ({
             ...prev,
             [actividad.uuid]: e.target.value
@@ -1222,10 +1547,10 @@ const ProyectoPage = () => {
 
     // Custom templates 
     const headerPanelActividad = (options: any, data: any) => {
-        console.log('Rendering headerPanelActividad for activity:', data);
         const className = `${options.className} flex align-items-center gap-2`;
         const actividadCompletada = isActividadCompletada(data.uuid, proyectoActivo?.uuid);
         const avanceActividad = calcularAvanceActividad(data.uuid, proyectoActivo?.uuid);
+        const actividadVencida = isActividadVencida(data);
         
         // Contar tareas solo si están cargadas desde el cache/estado local
         const tareasActuales = tareasPorActividad[data.uuid] || [];
@@ -1242,7 +1567,28 @@ const ProyectoPage = () => {
         const tareasCompletadas = hayTareasCargadas ? tareasCompletadasLocales : tareasCompletadasServidor;
         
         return (
-            <div className={className} style={{ flexWrap: 'nowrap' }}>
+            <div className={className} style={{ flexWrap: 'nowrap', position: 'relative' }}>
+                {/* Etiqueta de vencimiento flotante */}
+                {actividadVencida && !actividadCompletada && (
+                    <div 
+                        className="absolute top-0 right-0 z-5"
+                        style={{ 
+                            transform: 'translate(8px, -8px)',
+                        }}
+                    >
+                        <Tag 
+                            value="VENCIDA" 
+                            severity="danger" 
+                            className="text-xs font-bold shadow-3"
+                            style={{
+                                fontSize: '10px',
+                                padding: '2px 6px',
+                                borderRadius: '4px'
+                            }}
+                        />
+                    </div>
+                )}
+                
                 {/* Contenedor del contenido principal - ocupa el espacio disponible */}
                 <div className="flex align-items-center gap-2 flex-grow-1 overflow-hidden">
                     {actividadCompletada ? (
@@ -1252,13 +1598,13 @@ const ProyectoPage = () => {
                     ) : (
                         <div className="flex align-items-center gap-1" 
                              title={`${tareasCompletadas}/${totalTareas} tareas completadas`}>
-                            <i className="pi pi-clock text-orange-500 flex-shrink-0"></i>
-                            <span className="text-xs text-orange-500 font-semibold flex-shrink-0">
+                            <i className={`pi pi-clock ${actividadVencida ? 'text-red-500' : 'text-orange-500'} flex-shrink-0`}></i>
+                            <span className={`text-xs ${actividadVencida ? 'text-red-500' : 'text-orange-500'} font-semibold flex-shrink-0`}>
                                 {`${tareasCompletadas}/${totalTareas}`}
                             </span>
                         </div>
                     )}
-                    <span className="font-bold text-ellipsis overflow-hidden whitespace-nowrap flex-grow-1" 
+                    <span className={`font-bold text-ellipsis overflow-hidden whitespace-nowrap flex-grow-1 ${actividadVencida && !actividadCompletada ? 'text-red-600' : ''}`}
                           title={data.nombre}>
                         {data.nombre}
                         {/* Leyenda de solo lectura */}
@@ -1715,15 +2061,18 @@ const ProyectoPage = () => {
                                         <div className="p-3 border-bottom-1 surface-border">
                                             <div className="flex align-items-center justify-content-between">
                                                 <span className="font-bold m-0 text-primary-700 dark:text-primary-300">{actividadSeleccionada.nombre}</span>
-                                                <Tag value={actividadSeleccionada.prioridad} 
-                                                    severity={
-                                                        actividadSeleccionada.prioridad === 'Alta' 
-                                                        ? 'danger' 
-                                                        : actividadSeleccionada.prioridad === 'Media' 
-                                                        ? 'warning' 
-                                                        : 'info'
-                                                    } 
-                                                />
+                                                <div className="flex align-items-center gap-2">
+                                                    
+                                                    <Tag value={actividadSeleccionada.prioridad} 
+                                                        severity={
+                                                            actividadSeleccionada.prioridad === 'Alta' 
+                                                            ? 'danger' 
+                                                            : actividadSeleccionada.prioridad === 'Media' 
+                                                            ? 'warning' 
+                                                            : 'info'
+                                                        } 
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                         
@@ -1889,7 +2238,7 @@ const ProyectoPage = () => {
                                             <div className="border-top-1 surface-border pt-4">
                                                 <div className="grid">
                                                     {(accessDeleteActividad && actividadSeleccionada.can_be_worked) && (
-                                                        <div className="col-6">
+                                                        <div className="col-4">
                                                             <Button
                                                                 icon="pi pi-trash"
                                                                 severity="danger"
@@ -1899,7 +2248,7 @@ const ProyectoPage = () => {
                                                         </div>
                                                     )}
                                                     {(accessEditActividad && actividadSeleccionada.can_be_worked) && (
-                                                        <div className="col-6">
+                                                        <div className="col-4">
                                                             <Button
                                                                 icon="pi pi-pencil"
                                                                 severity="warning"
@@ -1909,6 +2258,17 @@ const ProyectoPage = () => {
                                                             />
                                                         </div>
                                                     )}
+                                                    <div className="col-4">
+                                                        <Button
+                                                        icon="pi pi-file-pdf"
+                                                        outlined
+                                                        label='Exportar'
+                                                        onClick={exportarActividadAPDF}
+                                                        tooltip="Exportar detalles de la actividad a PDF"
+                                                        className="text-blue-600 hover:bg-blue-50"
+                                                        tooltipOptions={{ position: 'bottom' }}
+                                                    />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
