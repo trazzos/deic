@@ -43,9 +43,9 @@ export default function ReportesPage() {
 
     const estatusOptions = [
         { label: 'Todos', value: null },
-        { label: 'Completado', value: 'Completo' },
-        { label: 'En curso', value: 'Iniciado' },
-        { label: 'Sin iniciar', value: 'Pendiente' },
+        { label: 'Completado', value: 'completado' },
+        { label: 'En curso', value: 'en_curso' },
+        { label: 'Sin iniciar', value: 'pendiente' },
     ];
 
     const breadcrumbItems = [

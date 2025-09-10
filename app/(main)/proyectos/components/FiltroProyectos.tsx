@@ -34,8 +34,10 @@ const FiltroProyectos: React.FC<FiltroProyectosProps> = ({
 }) => {
     const estatusOptions = [
         { label: 'Todos los estatus', value: null },
-        { label: 'Pendiente', value: 'Pendiente' },
-        { label: 'Completado', value: 'Completado' }
+        { label: 'Completado', value: 'completado' },
+        { label: 'En curso', value: 'en_curso' },
+        { label: 'Sin comenzar', value: 'pendiente' },
+       
     ];
 
     const tiposProyectoOptions = [
