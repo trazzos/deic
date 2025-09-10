@@ -5,8 +5,6 @@ import { Card } from 'primereact/card';
 import { Button } from 'primereact/button';
 
 import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
-import { PermissionGuard } from '@/src/components/PermissionGuard';
-import { AccessDenied } from '@/src/components/AccessDenied';
 import { usePermissions } from "@/src/hooks/usePermissions";
 
 export default function ReportesIndexPage() {
