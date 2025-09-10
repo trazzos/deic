@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from 'primereact/button';
-import { Card } from 'primereact/card';
 import { Calendar } from 'primereact/calendar';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
@@ -9,10 +9,9 @@ import { ProgressBar } from 'primereact/progressbar';
 import { Tag } from 'primereact/tag';
 import { Badge } from 'primereact/badge';
 import { Dropdown } from 'primereact/dropdown';
-import { InputText } from 'primereact/inputtext';
 import { Toast } from 'primereact/toast';
 import { Panel } from 'primereact/panel';
-import { Divider } from 'primereact/divider';
+import { Card } from 'primereact/card';
 import { Skeleton } from 'primereact/skeleton';
 import * as XLSX from 'xlsx';
 
@@ -26,10 +25,12 @@ import {
 import type { ReporteTipoProyecto, ReporteProyecto, ActividadReporte, ActividadDetalle, FiltrosReporte } from '@/types';
 
 export default function ReportesPage() {
+    const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [loadingCatalogos, setLoadingCatalogos] = useState(true);
+    const [showFiltros, setShowFiltros] = useState(false);
     const [reporteData, setReporteData] = useState<ReporteTipoProyecto[]>([]);
     const [tiposProyecto, setTiposProyecto] = useState<any[]>([]);
-    const [departamentos, setDepartamentos] = useState<any[]>([]);
     const [filtros, setFiltros] = useState<FiltrosReporte>({
         fecha_inicio: null,
         fecha_fin: null,
@@ -49,13 +50,13 @@ export default function ReportesPage() {
     ];
 
     const breadcrumbItems = [
-        { label: 'Reportes', url: '/reportes/index' },
-        { label: 'Centro de reportes', url: '/reportes/index' },
+        { label: 'Reportes', url: '/reportes' },
         { label: 'Proyectos' }
     ];
 
-    const cargarCatalogos = async () => {
+    const cargarCatalogos = useCallback(async () => {
         try {
+            setLoadingCatalogos(true);
             const [tiposResponse] = await Promise.all([
                 TipoProyectoService.getListTipoProyecto(),
             ]);
@@ -70,8 +71,11 @@ export default function ReportesPage() {
 
         } catch (error) {
             console.error('Error cargando catálogos:', error);
+            showError('Error al cargar catálogos', 'No se pudieron cargar los tipos de proyecto.');
+        } finally {
+            setLoadingCatalogos(false);
         }
-    };
+    }, [showError]);
 
     const cargarReporteProyectos = useCallback(async () => {
         setLoading(true);
@@ -88,6 +92,9 @@ export default function ReportesPage() {
 
     useEffect(() => {
         cargarCatalogos();
+    }, [cargarCatalogos]);
+
+    useEffect(() => {
         cargarReporteProyectos();
     }, [cargarReporteProyectos]);
 
@@ -107,32 +114,58 @@ export default function ReportesPage() {
         cargarReporteProyectos();
     };
 
-    const exportarExcel = () => {
+    const exportarExcel = useCallback(() => {
         try {
+            if (reporteData.length === 0) {
+                showError('Sin datos', 'No hay datos para exportar');
+                return;
+            }
+
             const workbook = XLSX.utils.book_new();
             
-            // Hoja principal con datos del proyecto
+            // Crear hoja de resumen ejecutivo
+            const resumenData = [
+                ['REPORTE DE PROYECTOS - FORMATO EJECUTIVO'],
+                ['Fecha de generación:', new Date().toLocaleDateString('es-ES')],
+                [''],
+                ['RESUMEN GENERAL'],
+                ['Total tipos de proyecto:', reporteData.length],
+                ['Total actividades proyectadas:', reporteData.reduce((sum, item) => sum + item.estadisticas.total_actividades, 0).toLocaleString()],
+                ['Total actividades completadas:', reporteData.reduce((sum, item) => sum + item.estadisticas.actividades_completadas, 0).toLocaleString()],
+                ['Promedio de avance general:', Math.round(reporteData.reduce((sum, item) => sum + item.estadisticas.porcentaje_completado, 0) / reporteData.length) + '%'],
+                [''],
+                ['DETALLE POR TIPO DE PROYECTO'],
+                ['']
+            ];
+
+            const wsResumen = XLSX.utils.aoa_to_sheet(resumenData);
+            XLSX.utils.book_append_sheet(workbook, wsResumen, 'Resumen Ejecutivo');
+
+            // Hoja principal con datos detallados
             const wsData = reporteData.map(item => ({
-                'Tipo proyecto': item.tipo_proyecto.nombre,
-                'Actividades proyectadas':item.estadisticas.total_actividades.toLocaleString(),
-                'Actividades alcanzadas': item.estadisticas.actividades_completadas.toLocaleString(),
-                'Estatus': item.estadisticas.porcentaje_completado + "%",
-                'Beneficiados': item.beneficiados.toLocaleString(),
+                'Tipo de Proyecto': item.tipo_proyecto.nombre,
+                'Actividades Proyectadas': item.estadisticas.total_actividades,
+                'Actividades Completadas': item.estadisticas.actividades_completadas,
+                'Actividades Pendientes': item.estadisticas.total_actividades - item.estadisticas.actividades_completadas,
+                'Porcentaje de Avance': item.estadisticas.porcentaje_completado + '%',
+                'Total Beneficiados': item.beneficiados.total,
+                'Detalles Beneficiados': item.beneficiados.detalles.map((b: any) => `${b.nombre}: ${b.total}`).join('; ')
             }));
 
             const ws = XLSX.utils.json_to_sheet(wsData);
-            XLSX.utils.book_append_sheet(workbook, ws, 'Reporte por tipo de proyecto');
+            XLSX.utils.book_append_sheet(workbook, ws, 'Datos Detallados');
 
-            // Generar archivo
-            const fileName = `reporte-proyectos-${new Date().toISOString().split('T')[0]}.xlsx`;
+            // Generar archivo con timestamp
+            const timestamp = new Date().toISOString().split('T')[0];
+            const fileName = `reporte-proyectos-${timestamp}.xlsx`;
             XLSX.writeFile(workbook, fileName);
 
-            showSuccess('Reporte exportado correctamente');
+            showSuccess('Excel exportado correctamente', `El archivo "${fileName}" se ha descargado.`);
         } catch (error) {
             console.error('Error exportando reporte:', error);
-            showError('Error al exportar el reporte');
+            showError('Error al exportar el reporte', 'Ocurrió un error al generar el archivo Excel.');
         }
-    };
+    }, [reporteData, showSuccess, showError]);
 
     const renderProgreso = (rowData: ReporteProyecto) => {
         return (
@@ -223,46 +256,6 @@ export default function ReportesPage() {
         );  
     };
 
-    /*
-    const resumenGeneral = () => {
-        const totalProyectos = reporteData.length;
-        const proyectosActivos = reporteData.filter(p => p.estatus === 'Activo').length;
-        const proyectosCompletados = reporteData.filter(p => p.estatus === 'Completado').length;
-        const promedioAvance = totalProyectos > 0 
-            ? Math.round(reporteData.reduce((sum, p) => sum + p.porcentaje_avance, 0) / totalProyectos)
-            : 0;
-        const totalBeneficiados = reporteData.reduce((sum, p) => sum + p.beneficiados, 0);
-
-        return (
-            <div className="grid">
-                <div className="col-12 md:col-3">
-                    <Card className="text-center">
-                        <h3 className="m-0 text-3xl text-blue-500">{totalProyectos}</h3>
-                        <p className="m-0 text-color-secondary">Total Proyectos</p>
-                    </Card>
-                </div>
-                <div className="col-12 md:col-3">
-                    <Card className="text-center">
-                        <h3 className="m-0 text-3xl text-green-500">{proyectosActivos}</h3>
-                        <p className="m-0 text-color-secondary">Activos</p>
-                    </Card>
-                </div>
-                <div className="col-12 md:col-3">
-                    <Card className="text-center">
-                        <h3 className="m-0 text-3xl text-orange-500">{proyectosCompletados}</h3>
-                        <p className="m-0 text-color-secondary">Completados</p>
-                    </Card>
-                </div>
-                <div className="col-12 md:col-3">
-                    <Card className="text-center">
-                        <h3 className="m-0 text-3xl text-purple-500">{totalBeneficiados.toLocaleString()}</h3>
-                        <p className="m-0 text-color-secondary">Beneficiados</p>
-                    </Card>
-                </div>
-            </div>
-        );
-    };*/
-
     if (!hasPermission('reportes.proyectos')) {
         return (
             <div className="surface-ground px-4 py-8 md:px-6 lg:px-8">
@@ -277,26 +270,19 @@ export default function ReportesPage() {
 
     const renderHeader = () => {
         return (
-            <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-start gap-3">
-                    <div></div>
-                    <div className="flex gap-2">
-                        <Button
-                            icon="pi pi-download"
-                            label="Exportar Excel"
-                            severity="success"
-                            onClick={exportarExcel}
-                            disabled={loading || reporteData.length === 0}
-                        />
-                        <Button
-                            icon="pi pi-refresh"
-                            label="Actualizar"
-                            onClick={cargarReporteProyectos}
-                            loading={loading}
-                        />
-                    </div>
-                </div>
-        )
-    }
+            <div className="flex flex-column md:flex-row md:justify-content-end md:align-items-start gap-3">
+                    <Button
+                        icon="pi pi-file-excel"
+                        label="Exportar Excel"
+                        severity="success"
+                        onClick={exportarExcel}
+                        disabled={loading || reporteData.length === 0}
+                        tooltip="Exportar reporte en formato Excel"
+                        tooltipOptions={{ position: 'bottom' }}
+                    />
+            </div>
+        );
+    };
 
     return (
         // px-4 md:px-6 lg:px-8
@@ -311,81 +297,177 @@ export default function ReportesPage() {
                     description="Análisis detallado del progreso y resultados de proyectos"
                 />
 
-                
-
-                {/* Resumen General */}
-                {/*!loading && reporteData.length > 0 && (
-                    <Panel header="Resumen General" className="mb-4">
-                        {resumenGeneral()}
-                    </Panel>
-                ) */}
-
-                {/* Filtros */}
-                <Panel header="Filtros de Búsqueda" toggleable collapsed>
-                    <div className="grid formgrid p-fluid">
-                        <div className="field col-12 md:col-3">
-                            <label htmlFor="fechaInicio">Fecha Inicio</label>
-                            <Calendar
-                                id="fechaInicio"
-                                value={filtros.fecha_inicio}
-                                onChange={(e) => setFiltros({...filtros, fecha_inicio: e.value || null})}
-                                showIcon
-                                dateFormat="dd/mm/yy"
-                                placeholder="Seleccionar fecha"
+                {/* Filtros con diseño moderno */}
+                <div className="mb-3 p-2 bg-white border-round-lg shadow-1 border-1 surface-border">
+                    <div className="flex justify-content-between align-items-center">
+                        <div className="flex gap-2 align-items-center">
+                            <Button
+                                icon={showFiltros ? "pi pi-eye-slash" : "pi pi-filter"}
+                                label={showFiltros ? "Ocultar Filtros" : "Mostrar Filtros"}
+                                onClick={() => setShowFiltros(!showFiltros)}
+                                outlined
                             />
                         </div>
-                        <div className="field col-12 md:col-3">
-                            <label htmlFor="fechaFin">Fecha Fin</label>
-                            <Calendar
-                                id="fechaFin"
-                                value={filtros.fecha_fin}
-                                onChange={(e) => setFiltros({...filtros, fecha_fin: e.value || null})}
-                                showIcon
-                                dateFormat="dd/mm/yy"
-                                placeholder="Seleccionar fecha"
+                        <div className="flex align-items-center gap-2">
+                            <Button
+                                icon="pi pi-arrow-left"
+                                label="Regresar a Centro de Reportes"
+                                text
+                                onClick={() => router.push('/reportes')}
+                                className="text-primary-600 hover:bg-primary-50"
+                                tooltip="Regresar al menú principal de centro de reportes"
+                                tooltipOptions={{ position: 'bottom' }}
                             />
-                        </div>
-                        <div className="field col-12 md:col-3">
-                            <label htmlFor="tipoProyecto">Tipo de Proyecto</label>
-                            <Dropdown
-                                id="tipoProyecto"
-                                value={filtros.tipo_proyecto_id}
-                                options={tiposProyecto}
-                                onChange={(e) => setFiltros({...filtros, tipo_proyecto_id: e.value})}
-                                placeholder="Seleccionar tipo"
-                            />
-                        </div>
-                        <div className="field col-12 md:col-3">
-                            <label htmlFor="estatus">Estatus de avance</label>
-                            <Dropdown
-                                id="estatus"
-                                value={filtros.estatus}
-                                options={estatusOptions}
-                                onChange={(e) => setFiltros({...filtros, estatus: e.value})}
-                                placeholder="Seleccionar estatus"
-                            />
-                        </div>
-                        <div className="field col-12 md:col-3 flex align-items-end">
-                            <div className="flex gap-2 w-full">
-                                <Button
-                                    icon="pi pi-search"
-                                    label="Filtrar"
-                                    onClick={aplicarFiltros}
-                                    loading={loading}
-                                    className="flex-1"
-                                />
-                                <Button
-                                    icon="pi pi-times"
-                                    severity="secondary"
-                                    onClick={limpiarFiltros}
-                                    tooltip="Limpiar filtros"
-                                />
-                            </div>
                         </div>
                     </div>
-                </Panel>
+                    
+                    {showFiltros && (
+                        <div className="flex flex-column gap-3 p-3 border-round">
+                            <div className="grid">
+                                <div className="col-12 md:col-3">
+                                    <label className="block text-sm font-medium mb-2">Fecha Inicio</label>
+                                    {loadingCatalogos ? (
+                                        <Skeleton height="2.5rem" />
+                                    ) : (
+                                        <Calendar
+                                            value={filtros.fecha_inicio}
+                                            onChange={(e) => setFiltros({...filtros, fecha_inicio: e.value || null})}
+                                            placeholder="Seleccionar fecha"
+                                            className="w-full"
+                                            dateFormat="dd/mm/yy"
+                                            showIcon
+                                        />
+                                    )}
+                                </div>
+                                
+                                <div className="col-12 md:col-3">
+                                    <label className="block text-sm font-medium mb-2">Fecha Fin</label>
+                                    {loadingCatalogos ? (
+                                        <Skeleton height="2.5rem" />
+                                    ) : (
+                                        <Calendar
+                                            value={filtros.fecha_fin}
+                                            onChange={(e) => setFiltros({...filtros, fecha_fin: e.value || null})}
+                                            placeholder="Seleccionar fecha"
+                                            className="w-full"
+                                            dateFormat="dd/mm/yy"
+                                            showIcon
+                                        />
+                                    )}
+                                </div>
+                                
+                                <div className="col-12 md:col-3">
+                                    <label className="block text-sm font-medium mb-2">Tipo de Proyecto</label>
+                                    {loadingCatalogos ? (
+                                        <Skeleton height="2.5rem" />
+                                    ) : (
+                                        <Dropdown
+                                            value={filtros.tipo_proyecto_id}
+                                            options={tiposProyecto}
+                                            onChange={(e) => setFiltros({...filtros, tipo_proyecto_id: e.value})}
+                                            placeholder="Seleccionar tipo"
+                                            className="w-full"
+                                            showClear
+                                        />
+                                    )}
+                                </div>
+                                
+                                <div className="col-12 md:col-3">
+                                    <label className="block text-sm font-medium mb-2">Estatus de Avance</label>
+                                    {loadingCatalogos ? (
+                                        <Skeleton height="2.5rem" />
+                                    ) : (
+                                        <Dropdown
+                                            value={filtros.estatus}
+                                            options={estatusOptions}
+                                            onChange={(e) => setFiltros({...filtros, estatus: e.value})}
+                                            placeholder="Seleccionar estatus"
+                                            className="w-full"
+                                            showClear
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        
+                            <div className="flex gap-2 mt-4">
+                                <Button
+                                    label="Buscar"
+                                    icon="pi pi-search"
+                                    onClick={aplicarFiltros}
+                                    loading={loading}
+                                    disabled={loading}
+                                />
+                                <Button
+                                    label="Limpiar"
+                                    icon="pi pi-times"
+                                    onClick={limpiarFiltros}
+                                    outlined
+                                    disabled={loading}
+                                />
+                                {(filtros.fecha_inicio || filtros.fecha_fin || filtros.tipo_proyecto_id || filtros.estatus) && (
+                                    <div className="flex align-items-center ml-2">
+                                        <small className="text-color-secondary">
+                                            {filtros.tipo_proyecto_id && `Tipo: ${tiposProyecto.find(t => t.value === filtros.tipo_proyecto_id)?.label} • `}
+                                            {filtros.estatus && `Estatus: ${estatusOptions.find(e => e.value === filtros.estatus)?.label} • `}
+                                            {(filtros.fecha_inicio && filtros.fecha_fin) && 'Rango de fechas configurado • '}
+                                            {((filtros.fecha_inicio && !filtros.fecha_fin) || (!filtros.fecha_inicio && filtros.fecha_fin)) && 'Completa ambas fechas para aplicar filtro de rango'}
+                                        </small>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
 
-                {/* Tabla de Datos */}
+                {/* Estados de carga y datos */}
+                {loading && reporteData.length === 0 && (
+                    <Card className="mt-4">
+                        <div className="text-center p-5">
+                            <ProgressBar mode="indeterminate" style={{ height: '6px' }} className="mb-3" />
+                            <h4 className="text-xl font-semibold mb-2">Cargando reporte...</h4>
+                            <p className="text-color-secondary m-0">
+                                Estamos procesando los datos del reporte. Esto puede tomar unos momentos.
+                            </p>
+                        </div>
+                    </Card>
+                )}
+
+                {/* Sin resultados - Con filtros aplicados */}
+                {reporteData.length === 0 && !loading && (filtros.fecha_inicio || filtros.fecha_fin || filtros.tipo_proyecto_id || filtros.estatus) && (
+                    <Card className="mt-4">
+                        <div className="text-center p-5">
+                            <i className="pi pi-search text-6xl text-orange-500 mb-3"></i>
+                            <h4 className="text-xl font-semibold mb-2">Sin resultados</h4>
+                            <p className="text-color-secondary mb-3">
+                                No se encontraron proyectos que coincidan con los filtros aplicados.
+                            </p>
+                            <Button 
+                                label="Limpiar filtros" 
+                                severity="secondary" 
+                                outlined 
+                                size="small"
+                                onClick={limpiarFiltros}
+                                icon="pi pi-filter-slash"
+                            />
+                        </div>
+                    </Card>
+                )}
+
+                {/* Estado inicial - Sin filtros aplicados */}
+                {reporteData.length === 0 && !loading && !(filtros.fecha_inicio || filtros.fecha_fin || filtros.tipo_proyecto_id || filtros.estatus) && (
+                    <Card className="mt-4">
+                        <div className="text-center p-5">
+                            <i className="pi pi-chart-bar text-6xl text-primary-600 mb-3"></i>
+                            <h4 className="text-xl font-semibold mb-2">Bienvenido al Reporte de Proyectos</h4>
+                            <p className="text-color-secondary m-0">
+                                Aplica filtros para ver el análisis detallado del progreso y resultados de proyectos.
+                            </p>
+                        </div>
+                    </Card>
+                )}
+
+                {/* Tabla de Datos - Solo se muestra si hay datos */}
+                {reporteData.length > 0 && (
                 <div className="bg-white border border-gray-200 overflow-hidden border-round-xl shadow-2">
                     <DataTable
                         value={reporteData}
@@ -441,6 +523,7 @@ export default function ReportesPage() {
                         
                     </DataTable>
                 </div>
+                )}
             </div>
         </div>
     );

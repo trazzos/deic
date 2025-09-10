@@ -20,7 +20,7 @@ export default function ReportesIndexPage() {
         {
             id: 'proyectos',
             titulo: 'Reporte de Proyectos',
-            descripcion: 'Análisis detallado del progreso y resultados de todos los proyectos con filtros por fecha, tipo y departamento.',
+            descripcion: 'Seguimiento de actividades proyectadas y alcanzadas, número de beneficiarios y estado general de los proyectos, agrupados por tipo de proyecto.',
             icon: 'pi pi-chart-bar',
             ruta: '/reportes/proyectos',
             color: 'blue',
@@ -30,7 +30,7 @@ export default function ReportesIndexPage() {
         {
             id: 'actividades',
             titulo: 'Reporte de Actividades',
-            descripcion: 'Seguimiento de actividades individuales con métricas de cumplimiento y beneficiarios.',
+            descripcion: 'Seguimiento de actividades individuales con métricas de cumplimiento.',
             icon: 'pi pi-list',
             ruta: '/reportes/actividades',
             color: 'green',
@@ -83,7 +83,7 @@ export default function ReportesIndexPage() {
                     footer={cardFooter}
                     className={`h-full ${reporte.disponible === false ? 'opacity-75' : 'cursor-pointer'} transition-all transition-duration-200 hover:shadow-3`}
                     onClick={() => navegarAReporte(reporte.ruta, reporte.disponible !== false)}>
-                    <p className="text-color-secondary line-height-3 mb-0">
+                    <p className="text-color-secondary text-justify line-height-3 mb-0">
                         {reporte.descripcion}
                     </p>
                 </Card>
@@ -113,34 +113,6 @@ export default function ReportesIndexPage() {
                         {reportes.map(renderReporteCard)}
                     </div>
                 </div>
-
-                {/* Información adicional */}
-                <Card className="mt-4">
-                    <div className="flex align-items-start gap-3">
-                        <i className="pi pi-info-circle text-blue-500 text-xl mt-1"></i>
-                        <div>
-                            <h4 className="mt-0 mb-2">Información sobre los Reportes</h4>
-                            <ul className="text-color-secondary pl-0 list-none">
-                                <li className="flex align-items-center gap-2 mb-2">
-                                    <i className="pi pi-check-circle text-green-500"></i>
-                                    Todos los reportes incluyen capacidad de exportación a Excel
-                                </li>
-                                <li className="flex align-items-center gap-2 mb-2">
-                                    <i className="pi pi-check-circle text-green-500"></i>
-                                    Los datos se actualizan en tiempo real
-                                </li>
-                                <li className="flex align-items-center gap-2 mb-2">
-                                    <i className="pi pi-check-circle text-green-500"></i>
-                                    Filtros avanzados disponibles para personalizar la información
-                                </li>
-                                <li className="flex align-items-center gap-2">
-                                    <i className="pi pi-check-circle text-green-500"></i>
-                                    Acceso controlado por permisos de usuario
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </Card>
             </div>
         </div>
     );
