@@ -51,7 +51,7 @@ export default function ReportesPage() {
 
     const breadcrumbItems = [
         { label: 'Reportes', url: '/reportes' },
-        { label: 'Proyectos' }
+        { label: 'Reporte de Proyectos' }
     ];
 
     const cargarCatalogos = useCallback(async () => {
@@ -287,8 +287,6 @@ export default function ReportesPage() {
     return (
         // px-4 md:px-6 lg:px-8
         <div className="surface-ground">
-            <Toast ref={toast} />
-            
             <div className="flex flex-column gap-4">
                 <CustomBreadcrumb 
                     items={breadcrumbItems}
