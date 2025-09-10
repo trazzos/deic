@@ -465,7 +465,7 @@ export default function ReporteActividadesPage() {
                                     'Sin Comenzar', 
                                     resumenActividades.pendiente, 
                                     'pendiente', 
-                                    'blue', 
+                                    'gray', 
                                     'pi pi-circle'
                                 )}
                             </div>
@@ -493,12 +493,12 @@ export default function ReporteActividadesPage() {
                             <div className="flex align-items-center justify-content-between mb-4">
                                 <div className="flex align-items-center gap-2">
                                     <i className="pi pi-list text-blue-500"></i>
-                                    <h3 className="m-0">
+                                    <h5 className="m-0">
                                         Actividades {
                                             tipoDetalleSeleccionado === 'completado' ? 'Completadas' :
                                             tipoDetalleSeleccionado === 'en_curso' ? 'En Curso' : 'Sin Comenzar'
                                         }
-                                    </h3>
+                                    </h5>
                                     <span className="text-sm text-gray-500">({actividadesDetalle.length} actividades)</span>
                                 </div>
                                 <Button
