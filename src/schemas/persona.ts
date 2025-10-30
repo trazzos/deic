@@ -3,8 +3,13 @@ import * as Yup from 'yup';
 export const formularioSchema = Yup.object().shape({
     dependencia_type: Yup.string().required('El tipo de dependencia es obligatorio'),
     secretaria_id: Yup.number().when('dependencia_type', {
-        is: 'Secretaria',
+        is: (val: string) => val === 'Secretaria' || val === 'Unidad de Apoyo',
         then: (schema) => schema.required('La secretaría es obligatoria'),
+        otherwise: (schema) => schema.nullable(),
+    }),
+    unidad_apoyo_id: Yup.number().when('dependencia_type', {
+        is: 'Unidad de Apoyo',
+        then: (schema) => schema.required('La unidad de apoyo es obligatoria'),
         otherwise: (schema) => schema.nullable(),
     }),
     subsecretaria_id: Yup.number().when('dependencia_type', {

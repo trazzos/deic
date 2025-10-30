@@ -46,11 +46,41 @@ export const schemaActividad = Yup.object().shape({
     })).nullable(),
 });
 
+// Función para crear esquema dinámico basado en el tipo de proyecto
+export const createSchemaProyecto = (tiposProyecto: any[], tipoProyectoId?: string | number) => {
+    const tipoProyectoSeleccionado = tiposProyecto.find(tipo => tipo.id == tipoProyectoId);
+    const esTipoInversion = tipoProyectoSeleccionado?.nombre?.toLowerCase().includes('inversión') || 
+                           tipoProyectoSeleccionado?.nombre?.toLowerCase().includes('inversion');
+
+    return Yup.object().shape({
+        tipoProyecto: Yup.string().required('El tipo de proyecto es obligatorio'),
+        departamento: Yup.string().required('El departamento es obligatorio'),
+        nombre: Yup.string().required('El nombre es obligatorio'),
+        descripcion: Yup.string().required('La descripción es obligatoria'),
+        monto: esTipoInversion 
+            ? Yup.number()
+                .required('El monto es obligatorio para proyectos de inversión')
+                .min(0.01, 'El monto debe ser mayor a 0')
+                .typeError('El monto debe ser un número válido')
+            : Yup.number()
+                .nullable()
+                .transform((value, originalValue) => originalValue === '' ? null : value)
+                .min(0, 'El monto no puede ser negativo')
+                .typeError('El monto debe ser un número válido')
+    });
+};
+
+// Esquema base para compatibilidad hacia atrás
 export const schemaProyecto = Yup.object().shape({
     tipoProyecto: Yup.string().required('El tipo de proyecto es obligatorio'),
     departamento: Yup.string().required('El departamento es obligatorio'),
     nombre: Yup.string().required('El nombre es obligatorio'),
     descripcion: Yup.string().required('La descripción es obligatoria'),
+    monto: Yup.number()
+        .nullable()
+        .transform((value, originalValue) => originalValue === '' ? null : value)
+        .min(0, 'El monto no puede ser negativo')
+        .typeError('El monto debe ser un número válido')
 });
 
 const proyectoSchema = {

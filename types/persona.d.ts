@@ -1,6 +1,6 @@
 export interface Persona {
     id: number;
-    dependencia_type: 'Secretaria' | 'Subsecretaria' | 'Direccion' | 'Departamento' | null;
+    dependencia_type: 'Secretaria' | 'Unidad de Apoyo' | 'Subsecretaria' | 'Direccion' | 'Departamento' | null;
     dependencia_id: number | null;
     nombre: string;
     apellido_paterno: string;

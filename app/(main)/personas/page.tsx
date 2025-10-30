@@ -26,7 +26,7 @@ import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 
 // Services, Hooks, Contexts, Types, Schemas
 import { useNotification } from '@/layout/context/notificationContext';
-import { DepartamentoService, PersonaService, RoleService, OrganizacionService } from "@/src/services";
+import { DepartamentoService, PersonaService, RoleService, OrganizacionService, UnidadApoyoService } from "@/src/services";
 import { useFormErrorHandler } from '@/src/utils/errorUtils';
 import { Persona, Usuario } from '@/types/persona';
 import { formularioSchema, usuarioSchema } from '@/src/schemas/persona';
@@ -47,11 +47,13 @@ const PersonasPage = () => {
     const [todasSubsecretarias, setTodasSubsecretarias] = useState<any[]>([]);
     const [todasDirecciones, setTodasDirecciones] = useState<any[]>([]);
     const [todosDepartamentos, setTodosDepartamentos] = useState<any[]>([]);
+    const [todasUnidadesDeApoyo, setTodasUnidadesDeApoyo] = useState<any[]>([]);
     
     // Estados para filtros jerárquicos del lado del cliente
     const [subsecretariasFiltradas, setSubsecretariasFiltradas] = useState<any[]>([]);
     const [direccionesFiltradas, setDireccionesFiltradas] = useState<any[]>([]);
     const [departamentosFiltrados, setDepartamentosFiltrados] = useState<any[]>([]);
+    const [unidadesApoyoFiltradas, setUnidadesApoyoFiltradas] = useState<any[]>([]);
     
     const [loading, setLoading] = useState(false);
     const [loadingGuardar, setLoadingGuardar] = useState(false);
@@ -66,6 +68,7 @@ const PersonasPage = () => {
         subsecretaria_id: null,
         direccion_id: null,
         departamento_id: null,
+        unidad_apoyo_id: null,
         nombre: '',
         apellido_paterno: '',
         apellido_materno: '',
@@ -86,6 +89,7 @@ const PersonasPage = () => {
     const [filtroUsuario, setFiltroUsuario] = useState<string | null>(null);
     const [filtroDependenciaType, setFiltroDependenciaType] = useState<string | null>(null);
     const [filtroSecretaria, setFiltroSecretaria] = useState<number | null>(null);
+    const [filtroUnidadApoyo, setFiltroUnidadApoyo] = useState<number | null>(null);
     const [filtroSubsecretaria, setFiltroSubsecretaria] = useState<number | null>(null);
     const [filtroDireccion, setFiltroDireccion] = useState<number | null>(null);
     const [filtroDepartamento, setFiltroDepartamento] = useState<number | null>(null);
@@ -94,6 +98,7 @@ const PersonasPage = () => {
     const [filtroSubsecretariasFiltradas, setFiltroSubsecretariasFiltradas] = useState<any[]>([]);
     const [filtroDireccionesFiltradas, setFiltroDireccionesFiltradas] = useState<any[]>([]);
     const [filtroDepartamentosFiltrados, setFiltroDepartamentosFiltrados] = useState<any[]>([]);
+    const [filtroUnidadesApoyoFiltradas, setFiltroUnidadesApoyoFiltradas] = useState<any[]>([]);
     
     const [showFilters, setShowFilters] = useState(false);
     const [visibleUsuarioDialog, setVisibleUsuarioDialog] = useState(false);
@@ -119,6 +124,7 @@ const PersonasPage = () => {
                     secretariasResponse,
                     subsecretariasResponse,
                     direccionesResponse,
+                    unidadesApoyoResponse,
                     personasResponse
                 ] = await Promise.all([
                     RoleService.getListRolesSinPermiso(),
@@ -126,6 +132,7 @@ const PersonasPage = () => {
                     OrganizacionService.getSecretarias(),
                     OrganizacionService.getSubsecretarias(), 
                     OrganizacionService.getDirecciones(),
+                    UnidadApoyoService.getListUnidadApoyo(),
                     PersonaService.getListPersona()
                 ]);
 
@@ -135,6 +142,7 @@ const PersonasPage = () => {
                 setSecretarias(secretariasResponse.data);
                 setTodasSubsecretarias(subsecretariasResponse.data);
                 setTodasDirecciones(direccionesResponse.data);
+                setTodasUnidadesDeApoyo(unidadesApoyoResponse.data);
                 setPersonas(personasResponse.data);
 
             } catch (error: any) {
@@ -180,13 +188,15 @@ const PersonasPage = () => {
                 secretaria_id: null,
                 subsecretaria_id: null,
                 direccion_id: null,
-                departamento_id: null
+                departamento_id: null,
+                unidad_apoyo_id: null
             }));
             
             // Limpiar listas filtradas
             setSubsecretariasFiltradas([]);
             setDireccionesFiltradas([]);
             setDepartamentosFiltrados([]);
+            setUnidadesApoyoFiltradas([]);
         }
 
         // Manejar cambios en secretaria_id para filtrar subsecretarías del lado del cliente
@@ -197,17 +207,27 @@ const PersonasPage = () => {
                 subsecretaria_id: null,
                 direccion_id: null,
                 departamento_id: null,
+                unidad_apoyo_id: null,
                 dependencia_id: prev.dependencia_type === 'Secretaria' ? value : null
             }));
-            
+
             setDireccionesFiltradas([]);
             setDepartamentosFiltrados([]);
-            
-            if (value && ['Subsecretaria', 'Direccion', 'Departamento'].includes(formularioPersona.dependencia_type)) {
+
+            // Para Unidad de Apoyo, filtrar unidades de apoyo disponibles de la secretaría seleccionada
+            if (value && formularioPersona.dependencia_type === 'Unidad de Apoyo') {
+                const unidadesApoyoDisponibles = todasUnidadesDeApoyo.filter(u =>
+                    u.secretaria?.id === value
+                );
+                setUnidadesApoyoFiltradas(unidadesApoyoDisponibles);
+                setSubsecretariasFiltradas([]);
+            } else if (value && ['Subsecretaria', 'Direccion', 'Departamento'].includes(formularioPersona.dependencia_type)) {
                 const filtradas = todasSubsecretarias.filter(sub => sub.secretaria?.id === value);
                 setSubsecretariasFiltradas(filtradas);
+                setUnidadesApoyoFiltradas([]);
             } else {
                 setSubsecretariasFiltradas([]);
+                setUnidadesApoyoFiltradas([]);
             }
         }
 
@@ -229,6 +249,15 @@ const PersonasPage = () => {
             } else {
                 setDireccionesFiltradas([]);
             }
+        }
+
+        // Manejar cambios en unidad_apoyo_id para actualizar dependencia_id
+        if (name === 'unidad_apoyo_id') {
+            setFormularioPersona((prev: any) => ({
+                ...prev,
+                unidad_apoyo_id: value,
+                dependencia_id: prev.dependencia_type === 'Unidad de Apoyo' ? value : null
+            }));
         }
 
         // Manejar cambios en direccion_id para filtrar departamentos del lado del cliente
@@ -353,6 +382,24 @@ const PersonasPage = () => {
                     secretaria_id: data.dependencia_id
                 }));
                 break;
+            case 'Unidad de Apoyo':
+                // Encontrar la unidad de apoyo a la que pertenece la persona
+                const unidadApoyo = todasUnidadesDeApoyo.find(u => u.id === data.dependencia_id);
+                
+                if (unidadApoyo) {
+                    // Filtrar todas las unidades de apoyo de la misma secretaría
+                    const unidadesApoyoDisponibles = todasUnidadesDeApoyo.filter(u =>
+                        u.secretaria?.id === unidadApoyo.secretaria?.id
+                    );
+                    setUnidadesApoyoFiltradas(unidadesApoyoDisponibles);
+
+                    setFormularioPersona((prev: any) => ({
+                        ...prev,
+                        secretaria_id: unidadApoyo.secretaria?.id,
+                        unidad_apoyo_id: data.dependencia_id
+                    }));
+                }
+                break;
             case 'Subsecretaria':
                 const subsecretaria = todasSubsecretarias.find(sub => sub.id === data.dependencia_id);
                 let filtradasSubs = todasSubsecretarias.filter(sub => sub.secretaria?.id === subsecretaria?.secretaria?.id);
@@ -450,9 +497,11 @@ const PersonasPage = () => {
         setFiltroUsuario(null);
         setFiltroDependenciaType(null);
         setFiltroSecretaria(null);
+        setFiltroUnidadApoyo(null);
         setFiltroSubsecretaria(null);
         setFiltroDireccion(null);
         setFiltroDepartamento(null);
+        setFiltroUnidadesApoyoFiltradas([]);
         setFiltroSubsecretariasFiltradas([]);
         setFiltroDireccionesFiltradas([]);
         setFiltroDepartamentosFiltrados([]);
@@ -583,6 +632,7 @@ const PersonasPage = () => {
                                     showClear
                                     options={[
                                         { label: 'Secretaría', value: 'Secretaria' },
+                                        { label: 'Unidad de Apoyo', value: 'Unidad de Apoyo' },
                                         { label: 'Subsecretaría', value: 'Subsecretaria' },
                                         { label: 'Dirección', value: 'Direccion' },
                                         { label: 'Departamento', value: 'Departamento' },
@@ -612,7 +662,7 @@ const PersonasPage = () => {
                         <div className="flex flex-column md:flex-row gap-3">
                             <div className="flex flex-auto gap-2">
                                 {
-                                     ['Secretaria','Subsecretaria','Direccion','Departamento'].includes(filtroDependenciaType || '') && (
+                                     ['Secretaria','Unidad de Apoyo','Subsecretaria','Direccion','Departamento'].includes(filtroDependenciaType || '') && (
                                          <Dropdown
                                             showClear
                                             value={filtroSecretaria}
@@ -623,8 +673,24 @@ const PersonasPage = () => {
                                             disabled={filtroDependenciaType === null || filtroDependenciaType === '' || filtroDependenciaType === undefined}
                                         />)
                                 }
-                               
-                                { 
+
+                                {
+                                    filtroDependenciaType === 'Unidad de Apoyo' && (
+                                        <Dropdown
+                                            showClear
+                                            value={filtroUnidadApoyo}
+                                            options={[ ...filtroUnidadesApoyoFiltradas.map(u => ({
+                                                label: `${u.nombre} ${u.apellido_paterno} ${u.apellido_materno}`,
+                                                value: u.id
+                                            }))]}
+                                            onChange={e => handleFiltroChange('filtroUnidadApoyo', e.value)}
+                                            placeholder="Seleccione unidad de apoyo"
+                                            className="w-14rem"
+                                            disabled={!filtroSecretaria || filtroUnidadesApoyoFiltradas.length === 0}
+                                        />)
+                                }
+
+                                {
                                     ['Subsecretaria','Direccion','Departamento'].includes(filtroDependenciaType || '') && (
                                         <Dropdown
                                             showClear
@@ -685,26 +751,38 @@ const PersonasPage = () => {
         if (name === 'filtroDependenciaType') {
             setFiltroDependenciaType(value === undefined ? null : value);
             setFiltroSecretaria(null);
+            setFiltroUnidadApoyo(null);
             setFiltroSubsecretaria(null);
             setFiltroDireccion(null);
             setFiltroDepartamento(null);
+            setFiltroUnidadesApoyoFiltradas([]);
             setFiltroSubsecretariasFiltradas([]);
             setFiltroDireccionesFiltradas([]);
             setFiltroDepartamentosFiltrados([]);
         } else if (name === 'filtroSecretaria') {
             setFiltroSecretaria(value === undefined ? null : value);
+            setFiltroUnidadApoyo(null);
             setFiltroSubsecretaria(null);
             setFiltroDireccion(null);
             setFiltroDepartamento(null);
             setFiltroDireccionesFiltradas([]);
             setFiltroDepartamentosFiltrados([]);
-            
-            if (value && filtroDependenciaType && ['Subsecretaria', 'Direccion', 'Departamento'].includes(filtroDependenciaType)) {
+
+            // Para Unidad de Apoyo, filtrar unidades de apoyo de la secretaría seleccionada
+            if (value && filtroDependenciaType && filtroDependenciaType === 'Unidad de Apoyo') {
+                const unidadesApoyoFiltradas = todasUnidadesDeApoyo.filter(u =>
+                    u.secretaria_id === value
+                );
+                setFiltroUnidadesApoyoFiltradas(unidadesApoyoFiltradas);
+            } else if (value && filtroDependenciaType && ['Subsecretaria', 'Direccion', 'Departamento'].includes(filtroDependenciaType)) {
                 const filtradas = todasSubsecretarias.filter(sub => sub.secretaria?.id === value);
                 setFiltroSubsecretariasFiltradas(filtradas);
             } else {
                 setFiltroSubsecretariasFiltradas([]);
+                setFiltroUnidadesApoyoFiltradas([]);
             }
+        } else if (name === 'filtroUnidadApoyo') {
+            setFiltroUnidadApoyo(value === undefined ? null : value);
         } else if (name === 'filtroSubsecretaria') {
             setFiltroSubsecretaria(value === undefined ? null : value);
             setFiltroDireccion(null);
@@ -745,6 +823,8 @@ const PersonasPage = () => {
         let dependenciaMatch = true;
         if (filtroDependenciaType === 'Secretaria' && filtroSecretaria) {
             dependenciaMatch = p.dependencia_id === filtroSecretaria;
+        } else if (filtroDependenciaType === 'Unidad de Apoyo' && filtroUnidadApoyo) {
+            dependenciaMatch = p.id === filtroUnidadApoyo;
         } else if (filtroDependenciaType === 'Subsecretaria' && filtroSubsecretaria) {
             dependenciaMatch = p.dependencia_id === filtroSubsecretaria;
         } else if (filtroDependenciaType === 'Direccion' && filtroDireccion) {
@@ -797,7 +877,7 @@ const PersonasPage = () => {
                     <span className="text-surface-200 font-bold text-sm">Tipo:</span>
                     <span className="text-surface-600 text-sm">{rowData.dependencia_type}</span>
                 </div>
-                {['Secretaria', 'Subsecretaria', 'Direccion', 'Departamento'].includes(rowData.dependencia_type ?? '') && (
+                {['Secretaria', 'Unidad de Apoyo', 'Subsecretaria', 'Direccion', 'Departamento'].includes(rowData.dependencia_type ?? '') && (
                     <div className="flex flex-1 gap-1">
                         <span className="text-surface-200 font-bold text-sm">Nombre:</span>
                         <span className="text-surface-600 text-sm">{rowData.nombre_dependencia}</span>
@@ -1105,6 +1185,7 @@ const PersonasPage = () => {
                                             value={formularioPersona.dependencia_type}
                                             options={[
                                                 { label: 'Secretaria', value: 'Secretaria' },
+                                                { label: 'Unidad de Apoyo', value: 'Unidad de Apoyo' },
                                                 { label: 'Subsecretaria', value: 'Subsecretaria' },
                                                 { label: 'Direccion', value: 'Direccion' },
                                                 { label: 'Departamento', value: 'Departamento' }
@@ -1122,7 +1203,7 @@ const PersonasPage = () => {
                                         <div className="flex flex-column gap-2">
                                             <label htmlFor="" className='font-medium'>
                                                 Secretaría 
-                                                {formularioPersona.dependencia_type === 'Secretaria' && <span className='text-red-600'>*</span>}
+                                                {(formularioPersona.dependencia_type === 'Secretaria') && <span className='text-red-600'>*</span>}
                                             </label>
                                             <Dropdown
                                                 name="secretaria_id"
@@ -1138,11 +1219,35 @@ const PersonasPage = () => {
                                         </div>
                                     )}
 
-                                    {/* Subsecretaría - Visible si tipo es Subsecretaria, Direccion o Departamento */}
+                                    {/* Unidad de Apoyo - Visible solo si tipo es Unidad de Apoyo */}
+                                    {formularioPersona.dependencia_type === 'Unidad de Apoyo' && (
+                                        <div className="flex flex-column gap-2">
+                                            <label htmlFor="" className='font-medium'>
+                                                Unidad de Apoyo <span className='text-red-600'>*</span>
+                                            </label>
+                                            <Dropdown
+                                                name="unidad_apoyo_id"
+                                                value={formularioPersona.unidad_apoyo_id}
+                                                options={unidadesApoyoFiltradas.map((u: any) => ({ 
+                                                    label: `${u.nombre} ${u.apellido_paterno} ${u.apellido_materno || ''}`.trim(), 
+                                                    value: u.id 
+                                                }))}
+                                                onChange={handleFormularioChange}
+                                                placeholder="Seleccione unidad de apoyo"
+                                                disabled={!formularioPersona.secretaria_id || unidadesApoyoFiltradas.length === 0}
+                                                className={!formularioPersona.secretaria_id ? 'surface-100' : ''}
+                                            />
+                                            {formularioErrors.unidad_apoyo_id && (
+                                                <small className='text-red-600'>{formularioErrors.unidad_apoyo_id}</small>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Subsecretaría - Visible si tipo es Subsecretaria, Direccion o Departamento (NO para Unidad de Apoyo) */}
                                     {formularioPersona.dependencia_type && ['Subsecretaria', 'Direccion', 'Departamento'].includes(formularioPersona.dependencia_type) && (
                                         <div className="flex flex-column gap-2">
                                             <label htmlFor="" className='font-medium'>
-                                                Subsecretaría 
+                                                Subsecretaría
                                                 {formularioPersona.dependencia_type === 'Subsecretaria' && <span className='text-red-600'>*</span>}
                                             </label>
                                             <Dropdown

@@ -3,5 +3,6 @@ export interface Proyecto {
     tipoProyecto:number|null,
     departamento:number|null,
     nombre:string,
-    descripcion:string
+    descripcion:string,
+    monto?:number|null
 }

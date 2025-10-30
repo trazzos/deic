@@ -52,6 +52,17 @@ export interface Departamento {
 
 }
 
+export interface UnidadApoyo {
+    id?: number;
+    nombre: string;
+    descripcion: string;
+    secretaria_id: number;
+    secretaria?: {
+        id: number;
+        nombre: string;
+    };
+}
+
 // Form interfaces for create/update operations
 export interface SecretariaForm {
     nombre: string;
@@ -76,6 +87,13 @@ export interface DepartamentoForm {
     direccion_id: number;
 }
 
+export interface UnidadApoyoForm {
+    id?: number;
+    nombre: string;
+    descripcion: string;
+    secretaria_id: number;
+}
+
 // Filter interfaces for search/pagination
 export interface SecretariaFilters {
     page?: number;
@@ -91,6 +109,10 @@ export interface SubsecretariaFilters extends SecretariaFilters {
 
 export interface DireccionFilters extends SecretariaFilters {
     subsecretaria_id?: number;
+    secretaria_id?: number;
+}
+
+export interface UnidadApoyoFilters extends SecretariaFilters {
     secretaria_id?: number;
 }
 

@@ -33,7 +33,7 @@ import {
     DependenciaProyectoService,
 } from '@/src/services';
 import type { Proyecto } from '@/types';
-import { schemaProyecto, schemaActividad } from '@/src/schemas/proyecto';
+import { schemaProyecto, schemaActividad, createSchemaProyecto } from '@/src/schemas/proyecto';
 import { useNotification } from '@/layout/context/notificationContext';
 import { useFormErrorHandler } from '@/src/utils/errorUtils';
 import { usePermissions } from "@/src/hooks/usePermissions";
@@ -107,6 +107,7 @@ const ProyectoPage = () => {
     const initStateFormularioProyecto = {
         uuid:null,
         tipoProyecto:null,
+        monto:null,
         departamento:null,
         nombre: '',
         descripcion: '',
@@ -339,7 +340,23 @@ const ProyectoPage = () => {
             pdf.text('Departamento:', marginLeft, currentY);
             pdf.setFont(undefined, 'normal');
             currentY = addWrappedText(proyectoActivo?.departamento_nombre || 'N/A', marginLeft + 35, currentY, availableWidth - 35);
-            currentY += 10;
+            currentY += 5;
+
+            // Monto (solo para proyectos de inversión)
+            if (proyectoActivo?.monto && proyectoActivo?.tipo_proyecto_nombre && 
+                (proyectoActivo.tipo_proyecto_nombre.toLowerCase().includes('inversión') || 
+                 proyectoActivo.tipo_proyecto_nombre.toLowerCase().includes('inversion'))) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Monto de Inversión:', marginLeft, currentY);
+                pdf.setFont(undefined, 'normal');
+                const montoFormateado = new Intl.NumberFormat('es-MX', {
+                    style: 'currency',
+                    currency: 'MXN'
+                }).format(proyectoActivo.monto);
+                pdf.text(montoFormateado, marginLeft + 50, currentY);
+                currentY += 5;
+            }
+            currentY += 5;
 
             checkNewPage(50);
 
@@ -676,15 +693,17 @@ const ProyectoPage = () => {
         setLoadingGuardar(true);
 
         try {
-          
-            await schemaProyecto.validate(formularioProyecto, { abortEarly: false });
+            // Usar esquema dinámico basado en el tipo de proyecto
+            const schemaDinamico = createSchemaProyecto(tiposProyecto, formularioProyecto.tipoProyecto || undefined);
+            await schemaDinamico.validate(formularioProyecto, { abortEarly: false });
             setFormularioErrors({});
 
             const contexto =  {
                 tipo_proyecto_id: formularioProyecto.tipoProyecto,
                 departamento_id: formularioProyecto.departamento,
-                nombre:formularioProyecto.nombre,
-                descripcion: formularioProyecto.descripcion
+                nombre: formularioProyecto.nombre,
+                descripcion: formularioProyecto.descripcion,
+                ...(formularioProyecto.monto && { monto: formularioProyecto.monto })
             }
             const response:any = formularioProyecto.uuid 
                 ? await ProyectoService.updateProyecto(formularioProyecto.uuid, contexto)
@@ -823,7 +842,8 @@ const ProyectoPage = () => {
             tipoProyecto:data.tipo_proyecto_id,
             departamento: data.departamento_id,
             nombre:data.nombre,
-            descripcion: data.descripcion
+            descripcion: data.descripcion,
+            monto: data.monto || null
         }));
         setVisibleFormulario(true);
        
@@ -1763,6 +1783,26 @@ const ProyectoPage = () => {
                                     />
                                 )}
                         </div>
+                        
+                        {/* Mostrar monto solo para proyectos de inversión */}
+                        {proyecto.monto && proyecto.tipo_proyecto_nombre && 
+                         (proyecto.tipo_proyecto_nombre.toLowerCase().includes('inversión') || 
+                          proyecto.tipo_proyecto_nombre.toLowerCase().includes('inversion')) && (
+                            <div className="flex align-items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900 border-round">
+                                <i className="pi pi-dollar text-green-600"></i>
+                                <div className="flex flex-column">
+                                    <span className="text-xs text-green-800 dark:text-green-200 font-medium">
+                                        Monto de Inversión
+                                    </span>
+                                    <span className="text-sm font-bold text-green-900 dark:text-green-100">
+                                        {new Intl.NumberFormat('es-MX', {
+                                            style: 'currency',
+                                            currency: 'MXN'
+                                        }).format(proyecto.monto)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -2203,72 +2243,72 @@ const ProyectoPage = () => {
                                             {/* Links Section */}
                                             <div className="mb-3">
                                                 <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Enlaces</h3>
-                                                <div className="grid">
-                                                    <div className="col-4">
-                                                        <Button
-                                                            label="Zoom"
-                                                            icon="pi pi-video"
-                                                            disabled={!actividadSeleccionada.link_zoom}
-                                                            onClick={() => window.open(actividadSeleccionada.link_zoom, '_blank', 'noopener,noreferrer')}
-                                                            className="p-button-outlined p-button-rounded w-full"
-                                                        />
-                                                    </div>
-                                                    <div className="col-4">
-                                                        <Button
-                                                            label="Registro"
-                                                            icon="pi pi-user-plus"
-                                                            disabled={!actividadSeleccionada.link_registro}
-                                                            onClick={() => window.open(actividadSeleccionada.link_registro, '_blank', 'noopener,noreferrer')}
-                                                            className="p-button-outlined p-button-rounded w-full"
-                                                        />
-                                                    </div>
-                                                    <div className="col-4">
-                                                        <Button
-                                                            label="Panelista"
-                                                            icon="pi pi-users"
-                                                            disabled={!actividadSeleccionada.link_panelista}
-                                                            onClick={() => window.open(actividadSeleccionada.link_panelista, '_blank', 'noopener,noreferrer')}
-                                                            className="p-button-outlined p-button-rounded w-full"
-                                                        />
-                                                    </div>
+                                                <div className="flex flex-wrap gap-2 justify-content-center sm:justify-content-between">
+                                                    <Button
+                                                        size='small'
+                                                        label="Zoom"
+                                                        icon="pi pi-video"
+                                                        disabled={!actividadSeleccionada.link_zoom}
+                                                        onClick={() => window.open(actividadSeleccionada.link_zoom, '_blank', 'noopener,noreferrer')}
+                                                        className="p-button-outlined p-button-rounded flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                    />
+                                                    <Button
+                                                        size='small'
+                                                        label="Registro"
+                                                        icon="pi pi-user-plus"
+                                                        disabled={!actividadSeleccionada.link_registro}
+                                                        onClick={() => window.open(actividadSeleccionada.link_registro, '_blank', 'noopener,noreferrer')}
+                                                        className="p-button-outlined p-button-rounded flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                    />
+                                                    <Button
+                                                        size='small'
+                                                        label="Panelista"
+                                                        icon="pi pi-users"
+                                                        disabled={!actividadSeleccionada.link_panelista}
+                                                        onClick={() => window.open(actividadSeleccionada.link_panelista, '_blank', 'noopener,noreferrer')}
+                                                        className="p-button-outlined p-button-rounded flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                    />
                                                 </div>
                                             </div>
 
-                                            {/* Actions Section */}
+                                            {/* Actions Section Actividad */}
                                             <div className="border-top-1 surface-border pt-4">
-                                                <div className="grid">
+                                                <div className="flex flex-wrap gap-2 justify-content-center sm:justify-content-between">
                                                     {(accessDeleteActividad && actividadSeleccionada.can_be_worked) && (
-                                                        <div className="col-4">
-                                                            <Button
-                                                                icon="pi pi-trash"
-                                                                severity="danger"
-                                                                label="Eliminar"
-                                                                className="p-button-outlined w-full"
-                                                                onClick={(event) => onDeleteActividad(event, { itemData: actividadSeleccionada })}/>
-                                                        </div>
+                                                        <Button
+                                                            size='small'
+                                                            icon="pi pi-trash"
+                                                            severity="danger"
+                                                            label="Eliminar"
+                                                            className="p-button-outlined flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                            style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                            onClick={(event) => onDeleteActividad(event, { itemData: actividadSeleccionada })}/>
                                                     )}
                                                     {(accessEditActividad && actividadSeleccionada.can_be_worked) && (
-                                                        <div className="col-4">
-                                                            <Button
-                                                                icon="pi pi-pencil"
-                                                                severity="warning"
-                                                                label="Editar"
-                                                                className="p-button-outlined w-full" 
-                                                                onClick={() => onEditActividad({ item: { itemData: actividadSeleccionada }})}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                    <div className="col-4">
                                                         <Button
+                                                            size='small'
+                                                            icon="pi pi-pencil"
+                                                            severity="warning"
+                                                            label="Editar"
+                                                            className="p-button-outlined flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                            style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                            onClick={() => onEditActividad({ item: { itemData: actividadSeleccionada }})}
+                                                        />
+                                                    )}
+                                                    <Button
+                                                        size='small'
                                                         icon="pi pi-file-pdf"
                                                         outlined
                                                         label='Exportar'
                                                         onClick={exportarActividadAPDF}
                                                         tooltip="Exportar detalles de la actividad a PDF"
-                                                        className="text-blue-600 hover:bg-blue-50"
+                                                        className="text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
                                                         tooltipOptions={{ position: 'bottom' }}
                                                     />
-                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2348,25 +2388,26 @@ const ProyectoPage = () => {
                                             </div>
 
                                             {/* Actions Section */}
-                                            <div className="border-top-1 surface-border pt-4 flex justify-content-between gap-2">
-                                               
-                                               {accessDeleteProyecto && (
-                                                    <Button 
-                                                        icon="pi pi-trash" 
-                                                        severity="danger" 
-                                                        label="Eliminar"
-                                                        className="p-button-outlined"
-                                                        loading={deletingRows[proyectoActivo.uuid] || false}
-                                                        onClick={(event) => handleDelete(event, { data: proyectoActivo })}/>
-                                                )}
-                                                {accessEditProyecto && (
-                                                    <Button 
-                                                        icon="pi pi-pencil" 
-                                                        severity="warning" 
-                                                        label="Editar"
-                                                        className="p-button-outlined"
-                                                        onClick={() => onEditProyecto({ data: proyectoActivo })}/>
-                                                )}
+                                            <div className="border-top-1 surface-border pt-4">
+                                                <div className="flex flex-column sm:flex-row gap-2 justify-content-center sm:justify-content-between">
+                                                   {accessDeleteProyecto && (
+                                                        <Button
+                                                            icon="pi pi-trash"
+                                                            severity="danger"
+                                                            label="Eliminar"
+                                                            className="p-button-outlined w-full sm:w-auto"
+                                                            loading={deletingRows[proyectoActivo.uuid] || false}
+                                                            onClick={(event) => handleDelete(event, { data: proyectoActivo })}/>
+                                                    )}
+                                                    {accessEditProyecto && (
+                                                        <Button
+                                                            icon="pi pi-pencil"
+                                                            severity="warning"
+                                                            label="Editar"
+                                                            className="p-button-outlined w-full sm:w-auto"
+                                                            onClick={() => onEditProyecto({ data: proyectoActivo })}/>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>  

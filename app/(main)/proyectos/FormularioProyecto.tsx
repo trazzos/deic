@@ -3,6 +3,7 @@ import { Button } from "primereact/button";
 import { Dropdown } from "primereact/dropdown";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
+import { InputNumber } from "primereact/inputnumber";
 
 type FormularioProyectoProps = {
     visible: boolean;
@@ -27,6 +28,11 @@ const FormularioProyecto = ({
     tiposProyecto,
     departamentos
 }: FormularioProyectoProps) => {
+   
+    // Verificar si el tipo de proyecto seleccionado es de inversión
+    const tipoProyectoSeleccionado = tiposProyecto?.find(tipo => tipo.id == initialData.tipoProyecto);
+    const esTipoInversion = tipoProyectoSeleccionado?.nombre?.toLowerCase().includes('inversión') || 
+                           tipoProyectoSeleccionado?.nombre?.toLowerCase().includes('inversion');
    
     const customHeader = (
         <div className="flex align-items-center gap-2 py-2">
@@ -93,6 +99,9 @@ const FormularioProyecto = ({
                                     <Dropdown 
                                         id="tipoProyecto"
                                         name="tipoProyecto"
+                                        filter
+                                        filterBy="nombre"
+                                        showClear
                                         value={initialData.tipoProyecto}
                                         onChange={(e) => setFieldValue(e.target.name, e.value)}
                                         options={tiposProyecto} 
@@ -111,6 +120,9 @@ const FormularioProyecto = ({
                                     <Dropdown 
                                         id="departamento"
                                         name="departamento"
+                                        filter
+                                        filterBy="nombre"
+                                        showClear
                                         value={initialData.departamento}
                                         onChange={(e) => setFieldValue(e.target.name, e.value)}
                                         options={departamentos} 
@@ -122,8 +134,32 @@ const FormularioProyecto = ({
                                     {errors.departamento && <small className="p-error">{errors.departamento}</small>}
                                 </div>
                             </div>
+                            
+                            {/* Campo Monto - Solo visible para proyectos de inversión */}
+                            {esTipoInversion && (
+                                <div className="grid">
+                                    <div className="col-12 flex flex-column gap-2">
+                                        <label htmlFor="monto" className="font-medium">
+                                            Monto <span className="text-red-600">*</span>
+                                        </label>
+                                        <InputNumber
+                                            id="monto" 
+                                            value={initialData.monto || null}
+                                            onValueChange={(e) => setFieldValue('monto', e.value)} 
+                                            mode="currency"
+                                            currency="MXN"
+                                            locale="es-MX"
+                                            minFractionDigits={2}
+                                            maxFractionDigits={2}
+                                            className={errors.monto ? 'p-invalid w-full' : 'w-full'}
+                                            placeholder="Ingrese el monto del proyecto"
+                                        />
+                                        {errors.monto && <small className="p-error">{errors.monto}</small>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-
+                        
                         {/* Sección de Descripción */}
                         <div className="col-12">
                             <div className="p-3 border-round bg-green-50 dark:bg-green-900 mb-3">
