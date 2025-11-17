@@ -32,7 +32,6 @@ cp .env.example .env.local
 # Instalar dependencias
 npm install
 
-# Asegúrate de estar en la carpeta donde clonaste el proyecto (ej: /home/proyectos/deic)
 # Iniciar servidor de desarrollo (Next.js + React)
 npm run dev
 # o
@@ -54,8 +53,8 @@ http://localhost:3000
 ## Despliegue en producción (Servidor dedicado o compartido) 🚀
 
 - Servidor dedicado: Garantiza acceso total a linea de comandos.
-- Compartido: Comprueba con tu proveedor si tienes acceso a linea de comando, permitido ejecutar 
-comandos sudos y editar archivos de virtualhost, de lo contrario no podras continuar.
+- Compartido: Comprueba con tu proveedor si tienes acceso a linea de comandos, que tengas permiso para ejecutar 
+comandos con sudo y editar archivos de virtualhost, de lo contrario no podras continuar.
 
 Esta aplicación usa Next.js (Frontend) y una API separada. En esta sección nos enfocamos en el despliegue del Frontend (Next.js + React). Para el Backend (API) consulta su README.
 
@@ -138,6 +137,7 @@ next start -p 3000
 - Usar `pm2` para mantener el proceso en ejecución:
 
 ```bash
+# Instala pm2
 npm install -g pm2
 # Ejecuta pm2 desde dentro del directorio del proyecto (donde está el package.json)
 cd /var/www/deic
@@ -153,152 +153,152 @@ pm2 save
 
 4. Configurar proxy reverso (Nginx / Apache)
 
-4.1 Nginx (Proxy reverso) — HTTP
+    4.1 Nginx (Proxy reverso) — HTTP
 
-Ejemplo de `server` para Nginx que proxee a Next.js (HTTP):
+    Ejemplo de `server` para Nginx que proxee a Next.js (HTTP):
 
-```
-server {
-	listen 80;
-	server_name app.example.com;
+    ```
+    server {
+        listen 80;
+        server_name app.example.com;
 
-	location / {
-		proxy_pass http://127.0.0.1:3000;
-		proxy_http_version 1.1;
-		proxy_set_header Upgrade $http_upgrade;
-		proxy_set_header Connection 'upgrade';
-		proxy_set_header Host $host;
-		proxy_cache_bypass $http_upgrade;
-	}
-}
-```
+        location / {
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+    }
+    ```
 
-4.2 Apache (Proxy reverso) — HTTP
+    4.2 Apache (Proxy reverso) — HTTP
 
-Ejemplo de `VirtualHost` para Apache que proxee a Next.js (HTTP):
+    Ejemplo de `VirtualHost` para Apache que proxee a Next.js (HTTP):
 
-```apache
-<VirtualHost *:80>
-	ServerName app.example.com
+    ```apache
+    <VirtualHost *:80>
+        ServerName app.example.com
 
-	# Habilitar módulos si no están habilitados
-	# sudo a2enmod proxy
-	# sudo a2enmod proxy_http
-	# sudo a2enmod proxy_wstunnel
-	# sudo systemctl restart apache2
+        # Habilitar módulos si no están habilitados
+        # sudo a2enmod proxy
+        # sudo a2enmod proxy_http
+        # sudo a2enmod proxy_wstunnel
+        # sudo systemctl restart apache2
 
-	ProxyPreserveHost On
-	ProxyRequests Off
+        ProxyPreserveHost On
+        ProxyRequests Off
 
-	ProxyPass / http://127.0.0.1:3000/
-	ProxyPassReverse / http://127.0.0.1:3000/
+        ProxyPass / http://127.0.0.1:3000/
+        ProxyPassReverse / http://127.0.0.1:3000/
 
-	ErrorLog ${APACHE_LOG_DIR}/app-error.log
-	CustomLog ${APACHE_LOG_DIR}/app-access.log combined
-</VirtualHost>
-```
+        ErrorLog ${APACHE_LOG_DIR}/app-error.log
+        CustomLog ${APACHE_LOG_DIR}/app-access.log combined
+    </VirtualHost>
+    ```
 
-5. Habilitar HTTPS (certificados) y ajustar cabeceras de seguridad
+    5. Habilitar HTTPS (certificados) y ajustar cabeceras de seguridad
 
-5.1 Nginx (HTTPS)
-Let's Encrypt / certbot y cabeceras de seguridad
+    5.1 Nginx (HTTPS)
+    Let's Encrypt / certbot y cabeceras de seguridad
 
-Para levantar certificados y configurar HTTPS de forma automática en Nginx con certbot (Ubuntu/Debian):
+    Para levantar certificados y configurar HTTPS de forma automática en Nginx con certbot (Ubuntu/Debian):
 
-```bash
-sudo apt update
-sudo apt install certbot python3-certbot-nginx
-# Ejecutar certbot para crear y configurar el certificado
-sudo certbot --nginx -d app.example.com
-```
+    ```bash
+    sudo apt update
+    sudo apt install certbot python3-certbot-nginx
+    # Ejecutar certbot para crear y configurar el certificado
+    sudo certbot --nginx -d app.example.com
+    ```
 
-Ejemplo de `server` para Nginx con HTTPS y cabeceras de seguridad:
+    Ejemplo de `server` para Nginx con HTTPS y cabeceras de seguridad:
 
-```nginx
-server {
-	listen 80;
-	server_name app.example.com;
+    ```nginx
+    server {
+        listen 80;
+        server_name app.example.com;
 
-	# Redirige todo a HTTPS
-	return 301 https://$host$request_uri;
-}
+        # Redirige todo a HTTPS
+        return 301 https://$host$request_uri;
+    }
 
-server {
-	listen 443 ssl http2;
-	server_name app.example.com;
+    server {
+        listen 443 ssl http2;
+        server_name app.example.com;
 
-	ssl_certificate /etc/letsencrypt/live/app.example.com/fullchain.pem;
-	ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
-	ssl_protocols TLSv1.2 TLSv1.3;
-	ssl_prefer_server_ciphers on;
-	ssl_session_cache shared:SSL:10m;
-	add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+        ssl_certificate /etc/letsencrypt/live/app.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_prefer_server_ciphers on;
+        ssl_session_cache shared:SSL:10m;
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
 
-	# Proxy a Next.js corriendo localmente
-	location / {
-		proxy_pass http://127.0.0.1:3000;
-		proxy_http_version 1.1;
-		proxy_set_header Upgrade $http_upgrade;
-		proxy_set_header Connection 'upgrade';
-		proxy_set_header Host $host;
-		proxy_cache_bypass $http_upgrade;
-	}
+        # Proxy a Next.js corriendo localmente
+        location / {
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
 
-	access_log /var/log/nginx/app-access.log;
-	error_log /var/log/nginx/app-error.log;
-}
-```
+        access_log /var/log/nginx/app-access.log;
+        error_log /var/log/nginx/app-error.log;
+    }
+    ```
 
-Notas para Nginx:
+    Notas para Nginx:
 
-- `certbot --nginx` intentará configurar Nginx automáticamente. Si usas una configuración personalizada, puedes usar `certbot certonly --nginx` y luego insertar manualmente los paths.
-- Renovación automática: `sudo certbot renew` — certbot crea tareas programadas al instalar.
+    - `certbot --nginx` intentará configurar Nginx automáticamente. Si usas una configuración personalizada, puedes usar `certbot certonly --nginx` y luego insertar manualmente los paths.
+    - Renovación automática: `sudo certbot renew` — certbot crea tareas programadas al instalar.
 
-5.2 Apache (HTTPS)
+    5.2 Apache (HTTPS)
 
-Ejemplo de configuración de `VirtualHost` para Apache con SSL y proxy reverso hacia Next.js:
+    Ejemplo de configuración de `VirtualHost` para Apache con SSL y proxy reverso hacia Next.js:
 
-```apache
-<VirtualHost *:443>
-	ServerName app.example.com
+    ```apache
+    <VirtualHost *:443>
+        ServerName app.example.com
 
-	SSLEngine on
-	SSLCertificateFile /etc/letsencrypt/live/app.example.com/fullchain.pem
-	SSLCertificateKeyFile /etc/letsencrypt/live/app.example.com/privkey.pem
+        SSLEngine on
+        SSLCertificateFile /etc/letsencrypt/live/app.example.com/fullchain.pem
+        SSLCertificateKeyFile /etc/letsencrypt/live/app.example.com/privkey.pem
 
-	ProxyPreserveHost On
-	ProxyRequests Off
+        ProxyPreserveHost On
+        ProxyRequests Off
 
-	ProxyPass / http://127.0.0.1:3000/
-	ProxyPassReverse / http://127.0.0.1:3000/
+        ProxyPass / http://127.0.0.1:3000/
+        ProxyPassReverse / http://127.0.0.1:3000/
 
-	ErrorLog ${APACHE_LOG_DIR}/app-error.log
-	CustomLog ${APACHE_LOG_DIR}/app-access.log combined
-</VirtualHost>
-```
+        ErrorLog ${APACHE_LOG_DIR}/app-error.log
+        CustomLog ${APACHE_LOG_DIR}/app-access.log combined
+    </VirtualHost>
+    ```
 
-Nota: ajusta `ProxyPass` y `ProxyPassReverse` según el puerto/host donde esté corriendo `next start`.
+    Nota: ajusta `ProxyPass` y `ProxyPassReverse` según el puerto/host donde esté corriendo `next start`.
 
-Apache + SSL (Let's Encrypt / certbot)
+    Apache + SSL (Let's Encrypt / certbot)
 
-Si usas Let's Encrypt, usa `certbot --apache` para configurar SSL automáticamente.
+    Si usas Let's Encrypt, usa `certbot --apache` para configurar SSL automáticamente.
 
-1. Instalar certbot plugin para Apache:
+        1. Instalar certbot plugin para Apache:
 
-```bash
-sudo apt update
-sudo apt install certbot python3-certbot-apache
-```
+        ```bash
+        sudo apt update
+        sudo apt install certbot python3-certbot-apache
+        ```
 
-2. Solicitar y aplicar certificado con Apache plugin:
+        2. Solicitar y aplicar certificado con Apache plugin:
 
-```bash
-sudo certbot --apache -d app.example.com
-```
+        ```bash
+        sudo certbot --apache -d app.example.com
+        ```
 
-3. Si no quieres modificar automáticamente la configuración de Apache, usa `certbot certonly --apache` y luego añade los `SSLCertificateFile` y `SSLCertificateKeyFile` en tu VirtualHost.
+        3. Si no quieres modificar automáticamente la configuración de Apache, usa `certbot certonly --apache` y luego añade los `SSLCertificateFile` y `SSLCertificateKeyFile` en tu VirtualHost.
 
-4. Renovación: `sudo certbot renew --dry-run` para pruebas o `sudo certbot renew` en producción (certbot instala hooks cron/`systemd` timer).
+        4. Renovación: `sudo certbot renew --dry-run` para pruebas o `sudo certbot renew` en producción (certbot instala hooks cron/`systemd` timer).
 
 ### 5) API / Backend
 
