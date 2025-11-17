@@ -5,26 +5,26 @@ import { useRouter } from 'next/navigation';
 import * as Yup from 'yup';
 
 import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
-import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions, ColumnFilterElementTemplateOptions } from 'primereact/column';
+import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
+import { MenuItem } from 'primereact/menuitem';
 
 import { useAuth } from '@/layout/context/authContext';
-import { useNotification } from '@/layout/context/notificationContext';
+import { useNotification } from '@/layout/context/notificationContext'
 
-
-import type { Demo } from '@/types';
-import { AutodidadService } from '@/src/services/catalogos';
+import type { Autoridad } from '@/types';
+import { AutoridadService } from '@/src/services/catalogos';
 import { generateUUID, extractErrorsFromResponse } from '@/src/utils'
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
 
 
 const AutoridadPage = () => {
-
-     const router = useRouter();
-
-    const [autoridades, setAutoridades] = useState<Demo.Customer[]>([]);
+    const [autoridades, setAutoridades] = useState<Autoridad[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
@@ -33,7 +33,6 @@ const AutoridadPage = () => {
     const [loadingSaveRows, setLoadingSaveRows] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [rowErrors, setRowErrors] = useState<{ [key: string]: string | null }>({});
-    const { isAuthenticated } = useAuth();
     const { showError, showSuccess } = useNotification();
     
 
@@ -67,12 +66,16 @@ const AutoridadPage = () => {
                     </span>
                     </div>
                     <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                        <Button
+                    <PermissionGuard 
+                        resource="catalogos.autoridades"
+                        action="agregar">
+                            <Button
                             className="w-auto" 
                             type="button" 
                             icon="pi pi-plus" 
                             label="Agregar" 
                             onClick={onAgregar}/>
+                        </PermissionGuard>
                     </div>
             </div>
         );
@@ -98,28 +101,27 @@ const AutoridadPage = () => {
     }
 
     useEffect(() => {
-
-        setLoading(true);
-
-        AutodidadService.getListAutoridad().then((response) => {
-            const filtrados = response.data.map((autoridad:any) => {
-                return {
+        const fetchAutoridades = async () => {
+            try {
+                setLoading(true);
+                const response = await AutoridadService.getListAutoridad();
+                const filtrados = response.data.map((autoridad: any) => ({
                     ...autoridad,
-                    keyString:generateUUID()
-                }
-            });
-            setAutoridades(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-    }, []);
+                    keyString: generateUUID()
+                }));
+                setAutoridades(filtrados);
+                initFilters();
+            } catch (error: any) {
+                const message = error?.response?.data?.message || error?.message || 'Error al cargar las autoridades';
+                showError('Error', message);
+                setAutoridades([]);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    useEffect(() => {
-    
-        if (!loading && !isAuthenticated) {
-            router.replace('/auth/login');
-        }
-    }, [isAuthenticated, loading]);
+        fetchAutoridades();
+    }, [showError]);
 
     const initFilters = () => {
 
@@ -148,7 +150,7 @@ const AutoridadPage = () => {
 
                     let { data, index } = e;
                     setDeletingRows({ [data.keyString]: true });
-                    const response:any = await AutodidadService.deleteAutoridad(data.id);
+                    const response:any = await AutoridadService.deleteAutoridad(data.id);
                     const createdAutoridad = await response.data;
 
                     updateRows({ ...createdAutoridad, keyString: data.keyString }, index, true);
@@ -212,7 +214,7 @@ const AutoridadPage = () => {
         if (!data.id) {
             try {
 
-               const response:any = await AutodidadService.createAutoridad(contexto);
+               const response:any = await AutoridadService.createAutoridad(contexto);
                const createdAutoridad = await response.data;
 
                updateRows({ ...createdAutoridad, keyString: data.keyString }, index);
@@ -231,7 +233,7 @@ const AutoridadPage = () => {
         } else {
             try {
              
-                const response = await AutodidadService.updateAutoridad(formulario.id,contexto);
+                const response = await AutoridadService.updateAutoridad(formulario.id,contexto);
                 const updatedAutoridad = await response.data;
              
                 updateRows({ ...updatedAutoridad, keyString: data.keyString }, index);
@@ -405,73 +407,97 @@ const AutoridadPage = () => {
     
             return (
                 <div className="flex align-items-center justify-content-center gap-2">
-                    <Button
-                        icon="pi pi-pencil" 
-                        size='small'
-                        onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
-                    />
-                    <Button
-                        icon="pi pi-trash" 
-                        size='small'
-                        severity='danger'
-                        loading={deletingRows[rowData.keyString]}
-                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                    />
+                    <PermissionGuard 
+                        resource="catalogos.autoridades"
+                        action="editar">
+                            <Button
+                                icon="pi pi-pencil" 
+                                size='small'
+                                onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
+                            />
+                    </PermissionGuard>
+                    <PermissionGuard
+                        resource="catalogos.autoridades"
+                        action="eliminar">
+                        <Button
+                            icon="pi pi-trash" 
+                            size='small'
+                            severity='danger'
+                            loading={deletingRows[rowData.keyString]}
+                            onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
+                        />
+                    </PermissionGuard>
                 </div>
             );
         }
     };
 
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Catálogos', icon: 'pi pi-briefcase' },
+        { label: 'Autoridades', icon: 'pi pi-user-edit' }
+    ];
+
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de autoridades</h5>
-                    <DataTable
-                        value={autoridades}
-                        paginator
-                        rows={10}
-                        dataKey="keyString"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No customers found."
-                        editMode='row'
-                        editingRows={rowsEditing}
-                        onRowEditInit={onRowEditInit}
-                        onRowEditCancel={onRowEditCancel}
-                        onRowEditChange={e => setRowsEditing(e.data)}
-                        header={header}
-                    >
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            editor={(options) => textEditor(options)}
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            editor={(options) => textAreaEditor(options)}
-                            style={{ maxWidth: '8rem' }}
-                            />                        
-                        <Column 
-                            rowEditor
-                            body={(rowData, options) => rowEditorTemplate(rowData, options, {
-                                onInit:onRowEditInit,
-                                onSave:handleSave,
-                                onCancel:onRowEditCancel,
-                                onDelete:handleDelete,
-                                isEditing: !!rowsEditing[rowData.keyString]
-                            })}
-                            bodyClassName="text-center" 
-                            
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+        <PermissionGuard 
+            resource="catalogos.autoridades"
+            action="acceso"
+            fallback={<AccessDenied variant="detailed" message="No tienes acceso a esta modulo"/>}>
+            <div className="grid">
+                <div className="col-12">
+                    <CustomBreadcrumb
+                        items={breadcrumbItems}
+                        theme="green"
+                        title="Catálogo de Autoridades"
+                        description="Administra el catálogo de autoridades del sistema"
+                        icon="pi pi-th-large"
+                    />
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">      
+                        <DataTable
+                            value={autoridades}
+                            paginator
+                            rows={10}
+                            dataKey="keyString"
+                            filters={filters}
+                            filterDisplay="menu"
+                            loading={loading}
+                            emptyMessage="No se encontraron registros."
+                            editMode='row'
+                            editingRows={rowsEditing}
+                            onRowEditInit={onRowEditInit}
+                            onRowEditCancel={onRowEditCancel}
+                            onRowEditChange={e => setRowsEditing(e.data)}
+                            header={header}
+                        >
+                            <Column 
+                                field="nombre" 
+                                header="Nombre" 
+                                editor={(options) => textEditor(options)}
+                                filter 
+                                filterPlaceholder="Busqueda por nombre" 
+                                style={{ maxWidth: '4rem' }} /> 
+                            <Column 
+                                field="descripcion" 
+                                header="Descripción" 
+                                editor={(options) => textAreaEditor(options)}
+                                style={{ maxWidth: '8rem' }}
+                                />                        
+                            <Column 
+                                rowEditor
+                                body={(rowData, options) => rowEditorTemplate(rowData, options, {
+                                    onInit:onRowEditInit,
+                                    onSave:handleSave,
+                                    onCancel:onRowEditCancel,
+                                    onDelete:handleDelete,
+                                    isEditing: !!rowsEditing[rowData.keyString]
+                                })}
+                                bodyClassName="text-center" 
+                                
+                                style={{ maxWidth: '2rem' }} />
+                        </DataTable>
+                    </div>
                 </div>
             </div>
-        </div>
+        </PermissionGuard>
     );
 };
 

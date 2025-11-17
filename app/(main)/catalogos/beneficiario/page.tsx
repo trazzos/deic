@@ -4,27 +4,36 @@ import { FilterMatchMode, FilterOperator } from 'primereact/api';
 import { useRouter } from 'next/navigation';
 import * as Yup from 'yup';
 
+// PrimeReact Components
 import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
-import { Column, ColumnFilterApplyTemplateOptions, ColumnFilterClearTemplateOptions, ColumnFilterElementTemplateOptions } from 'primereact/column';
+import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
+import { MenuItem } from 'primereact/menuitem';
 
-import { useAuth } from '@/layout/context/authContext';
+//components
+import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
+import PermissionGuard from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+
+//Context
 import { useNotification } from '@/layout/context/notificationContext';
 
-
-import type { Demo } from '@/types';
+//Service and Types
+import type { Beneficiario } from '@/types';
 import { BeneficiarioService } from '@/src/services/catalogos';
 import { generateUUID } from '@/src/utils'
+
+import { usePermissions } from '@/src/hooks/usePermissions';
+
 
 
 const BeneficiarioPage = () => {
 
-     const router = useRouter();
-
-    const [Beneficiarioes, setBeneficiarioes] = useState<Demo.Customer[]>([]);
+    const { isSuperAdmin, canUpdate, canDelete } = usePermissions();
+    const [Beneficiarioes, setBeneficiarioes] = useState<Beneficiario[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
@@ -33,9 +42,10 @@ const BeneficiarioPage = () => {
     const [loadingSaveRows, setLoadingSaveRows] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [rowErrors, setRowErrors] = useState<{ [key: string]: string | null }>({});
-    const { isAuthenticated } = useAuth();
     const { showError, showSuccess } = useNotification();
     
+    const accessEdit = isSuperAdmin || canUpdate('catalogos.beneficiarios');
+    const accessDelete = isSuperAdmin || canDelete('catalogos.beneficiarios');
 
     const rowSchema = Yup.object().shape({
         nombre: Yup.string().required('El nombre es obligatorio'),
@@ -61,18 +71,22 @@ const BeneficiarioPage = () => {
             <div className="flex flex-column md:flex-row justify-content-between gap-1">
                     <div className="flex flex-auto gap-2 ">
                         <Button type="button" icon="pi pi-filter-slash" label="Limpiar" outlined onClick={clearFilter} />
-                    <span className="p-input-icon-left">
-                        <i className="pi pi-search" />
-                        <InputText value={globalFilterValue} onChange={onGlobalFilterChange} placeholder="Busqueda por palabras" />
-                    </span>
+                        <span className="p-input-icon-left">
+                            <i className="pi pi-search" />
+                            <InputText value={globalFilterValue} onChange={onGlobalFilterChange} placeholder="Busqueda por palabras" />
+                        </span>
                     </div>
                     <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                        <Button
-                            className="w-auto" 
-                            type="button" 
-                            icon="pi pi-plus" 
-                            label="Agregar" 
-                            onClick={onAgregar}/>
+                        <PermissionGuard
+                            resource="catalogos.beneficiarios"
+                            action="agregar">
+                            <Button
+                                className="w-auto" 
+                                type="button" 
+                                icon="pi pi-plus" 
+                                label="Agregar" 
+                                onClick={onAgregar}/>
+                        </PermissionGuard>
                     </div>
             </div>
         );
@@ -98,28 +112,28 @@ const BeneficiarioPage = () => {
     }
 
     useEffect(() => {
-
-        setLoading(true);
-
-        BeneficiarioService.getListBeneficiario().then((response) => {
-            const filtrados = response.data.map((Beneficiario:any) => {
-                return {
-                    ...Beneficiario,
-                    keyString:generateUUID()
-                }
-            });
-            setBeneficiarioes(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-    }, []);
-
-    useEffect(() => {
-    
-        if (!loading && !isAuthenticated) {
-            router.replace('/auth/login');
+        const fetchBeneficiarioes = async () => {
+            try {
+                setLoading(true);
+                const response = await BeneficiarioService.getListBeneficiario();
+                const filtrados = response.data.map((Beneficiario:any) => {
+                    return {
+                        ...Beneficiario,
+                        keyString:generateUUID()
+                    }
+                });
+                setBeneficiarioes(filtrados);
+                setLoading(false);
+                initFilters();
+            } catch (error:any) {
+                showError(error.message || 'Error al cargar los beneficiarios');
+            } finally {
+                setLoading(false);
+            }
         }
-    }, [isAuthenticated, loading]);
+
+        fetchBeneficiarioes();
+    }, [showError]);
 
     const initFilters = () => {
 
@@ -399,73 +413,92 @@ const BeneficiarioPage = () => {
     
             return (
                 <div className="flex align-items-center justify-content-center gap-2">
-                    <Button
-                        icon="pi pi-pencil" 
-                        size='small'
-                        onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
-                    />
-                    <Button
-                        icon="pi pi-trash" 
-                        size='small'
-                        severity='danger'
-                        loading={deletingRows[rowData.keyString]}
-                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                    />
+                    {accessEdit && (
+                        <Button
+                            icon="pi pi-pencil" 
+                            size='small'
+                            onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} /> 
+                    )}
+                    {accessDelete && (  
+                        <Button
+                            icon="pi pi-trash" 
+                            size='small'
+                            severity='danger'
+                            loading={deletingRows[rowData.keyString]}
+                            onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} />
+                    )}
                 </div>
             );
         }
     };
 
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Catálogos', icon: 'pi pi-briefcase' },
+        { label: 'Beneficiarios', icon: 'pi pi-user-edit' }
+    ];
+
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de Beneficiarios</h5>
-                    <DataTable
-                        value={Beneficiarioes}
-                        paginator
-                        rows={10}
-                        dataKey="keyString"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No customers found."
-                        editMode='row'
-                        editingRows={rowsEditing}
-                        onRowEditInit={onRowEditInit}
-                        onRowEditCancel={onRowEditCancel}
-                        onRowEditChange={e => setRowsEditing(e.data)}
-                        header={header}
-                    >
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            editor={(options) => textEditor(options)}
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            editor={(options) => textAreaEditor(options)}
-                            style={{ maxWidth: '8rem' }}
-                            />                        
-                        <Column 
-                            rowEditor
-                            body={(rowData, options) => rowEditorTemplate(rowData, options, {
-                                onInit:onRowEditInit,
-                                onSave:handleSave,
-                                onCancel:onRowEditCancel,
-                                onDelete:handleDelete,
-                                isEditing: !!rowsEditing[rowData.keyString]
-                            })}
-                            bodyClassName="text-center" 
-                            
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+        <PermissionGuard
+            resource="catalogos.beneficiarios"
+            action="acceso"
+            fallback={<AccessDenied message='No tienes permiso para acceder a este modulo.' />}
+            >
+            <div className="grid">
+                <div className="col-12">
+                    <CustomBreadcrumb
+                        items={breadcrumbItems}
+                        theme="green"
+                        title="Catálogo de Beneficiarios"
+                        description="Administra el catálogo de beneficiarios"
+                        icon="pi pi-th-large"
+                    />
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                        <DataTable
+                            value={Beneficiarioes}
+                            paginator
+                            rows={10}
+                            dataKey="keyString"
+                            filters={filters}
+                            filterDisplay="menu"
+                            loading={loading}
+                            emptyMessage="No se encontraron registros."
+                            editMode='row'
+                            editingRows={rowsEditing}
+                            onRowEditInit={onRowEditInit}
+                            onRowEditCancel={onRowEditCancel}
+                            onRowEditChange={e => setRowsEditing(e.data)}
+                            header={header}
+                        >
+                            <Column 
+                                field="nombre" 
+                                header="Nombre" 
+                                editor={(options) => textEditor(options)}
+                                filter 
+                                filterPlaceholder="Busqueda por nombre" 
+                                style={{ maxWidth: '4rem' }} /> 
+                            <Column 
+                                field="descripcion" 
+                                header="Descripción" 
+                                editor={(options) => textAreaEditor(options)}
+                                style={{ maxWidth: '8rem' }}
+                                />                        
+                            <Column 
+                                rowEditor
+                                body={(rowData, options) => rowEditorTemplate(rowData, options, {
+                                    onInit:onRowEditInit,
+                                    onSave:handleSave,
+                                    onCancel:onRowEditCancel,
+                                    onDelete:handleDelete,
+                                    isEditing: !!rowsEditing[rowData.keyString]
+                                })}
+                                bodyClassName="text-center" 
+                                
+                                style={{ maxWidth: '2rem' }} />
+                        </DataTable>
+                    </div>
                 </div>
             </div>
-        </div>
+        </PermissionGuard>
     );
 };
 

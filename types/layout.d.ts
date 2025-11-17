@@ -91,6 +91,9 @@ export interface AppMenuItem extends MenuModel {
     badgeClass?: string;
     class?: string;
     preventExact?: boolean;
+    permissions?: string[];
+    permission?: string;
+    superAdminOnly?: boolean;
     visible?: boolean;
     disabled?: boolean;
     replaceUrl?: boolean;

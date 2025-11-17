@@ -6,59 +6,92 @@ import { LayoutContext } from './context/layoutcontext';
 import { MenuProvider } from './context/menucontext';
 import Link from 'next/link';
 import { AppMenuItem } from '@/types';
+import { usePermissions } from '@/src/hooks/usePermissions';
 
 const AppMenu = () => {
     const { layoutConfig } = useContext(LayoutContext);
+    const { hasPermission, isSuperAdmin, userRoles } = usePermissions();
+    
+
+    // Función para filtrar items del menú basado en permisos
+    const filterMenuItems = (items: AppMenuItem[]): AppMenuItem[] => {
+        return items.filter(item => {
+            // Si el item tiene subitems, filtrarlos recursivamente
+            if (item.items) {
+                const filteredSubItems = filterMenuItems(item.items);
+                if (filteredSubItems.length === 0) {
+                    return false; // Si no hay subitems válidos, ocultar el item padre
+                }
+                item.items = filteredSubItems;
+            }
+
+            if (isSuperAdmin) return true; // SuperAdmin ve todo
+
+            if (item.superAdminOnly) return false;
+
+            if (item.permission && item.permission !== '') {
+                return hasPermission(item.permission);
+            }
+            
+            if (item.permissions && item.permissions.length > 0) {
+                return item.permissions.some(perm => hasPermission(perm));
+            }
+            
+            return true;
+        });
+    };
 
     const model: AppMenuItem[] = [
         {
             label: 'Home',
-            items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }]
+            items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' }],
+            permissions: ['dashboard'],
         },
-
         {
-            label: 'Configuración',
-            icon: 'pi pi-fw pi-cogs',
-            items:[
-                {
-                    label:'Catalogos',
-                    icon: 'pi pi-th-large',
-                    items: [
-                            { label: 'Autoridades', icon: 'pi pi-fw pi-th-large', to: '/catalogos/autoridad' },
-                            { label: 'Beneficiarios', icon: 'pi pi-fw pi-th-large', to: '/catalogos/beneficiario'},
-                            { label: 'Capacitadores', icon: 'pi pi-fw pi-th-large', to: '/catalogos/capacitador'},
-                            { label: 'Departamentos', icon: 'pi pi-fw pi-th-large', to: '/catalogos/departamento'},
-                            { label: 'Tipos de actividad', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-actividad'},
-                            { label: 'Tipos de documento', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-documento'},
-                            { label: 'Tipos de proyecto', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-proyecto'},
-                    ],
-                },
-                { label: 'Roles de usuario', icon: 'pi pi-fw pi-key', to: '/roles' },
-                { label: 'Cuentas de usuario', icon: 'pi pi-fw pi-shield', to: '/cuentas'},
-                { label: 'Personas', icon: 'pi pi-fw pi-users', to: '/personas'},
-            ]
-        },
-
-        {
-            label: 'Proyectos y actividades',
+            label: 'Catálogos',
+            icon: 'pi pi-fw pi-th-large',
             items: [
-                { label: 'Tablero', icon: 'pi pi-fw pi-table', to: '/construccion' },
-                { label: 'Proyectos', icon: 'pi pi-fw pi-sliders-h', to: '/proyectos' },
-            ]    
+                { label: 'Autoridades', icon: 'pi pi-fw pi-th-large', to: '/catalogos/autoridad', permissions: ['catalogos.autoridades'] },
+                { label: 'Beneficiarios', icon: 'pi pi-fw pi-th-large', to: '/catalogos/beneficiario', permissions: ['catalogos.beneficiarios'] },
+                { label: 'Capacitadores', icon: 'pi pi-fw pi-th-large', to: '/catalogos/capacitador', permissions: ['catalogos.capacitadores'] },
+                { label: 'Dependencias', icon: 'pi pi-fw pi-th-large', to: '/catalogos/organizacion', permissions: ['catalogos.organizacion'] },
+                { label: 'Tipos de actividad', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-actividad', permissions: ['catalogos.tipos_actividad'] },
+                { label: 'Tipos de documento', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-documento', permissions: ['catalogos.tipos_documento'] },
+                { label: 'Tipos de proyecto', icon: 'pi pi-fw pi-th-large', to: '/catalogos/tipo-proyecto', permissions: ['catalogos.tipos_proyecto'] },
+            ],
+            permissions: ['catalogos'],
+
+        },
+        {
+            label: 'Gestión de cuentas',
+            icon: 'pi pi-fw pi-users',
+            items:[
+                { label: 'Roles de usuario', icon: 'pi pi-fw pi-key', to: '/roles', permissions:['gestion_cuentas.roles']},
+                { label: 'Personas', icon: 'pi pi-fw pi-users', to: '/personas', permissions:['gestion_cuentas.personas']},
+            ],
+            permissions:['gestion_cuentas']
+        },
+
+        {
+            label: 'Gestión de proyectos',
+            items: [
+                { label: 'Proyectos', icon: 'pi pi-fw pi-sliders-h', to: '/proyectos', permissions: ['gestion_proyectos.proyectos'] },
+            ],
+            permissions: ['gestion_proyectos']    
         },
          {
             label: 'Reportes',
             items: [
-                { label: 'Reporte de proyectos', icon: 'pi pi-fw pi-file', to: '/construccion' },
-                { label: 'Reporte de actividades', icon: 'pi pi-fw pi-file', to: '/construccion' },
-            ]    
+                { label: 'Centro de Reportes', icon: 'pi pi-fw pi-chart-bar', to: '/reportes', permissions: ['reportes'] },
+            ],
+            permissions: ['reportes']
         },
     ];
 
     return (
         <MenuProvider>
             <ul className="layout-menu">
-                {model.map((item, i) => {
+                {filterMenuItems(model).map((item, i) => {
                     return !item?.seperator ? <AppMenuitem item={item} root={true} index={i} key={item.label} /> : <li className="menu-separator"></li>;
                 })}
 

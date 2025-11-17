@@ -1,393 +1,370 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
-import { Button } from 'primereact/button';
+import React, { useState, useEffect, use } from 'react';
 import { Chart } from 'primereact/chart';
-import { Column } from 'primereact/column';
-import { DataTable } from 'primereact/datatable';
-import { Menu } from 'primereact/menu';
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ProductService } from '../../demo/service/ProductService';
-import { LayoutContext } from '../../layout/context/layoutcontext';
-import Link from 'next/link';
-import { Demo } from '@/types';
-import { ChartData, ChartOptions } from 'chart.js';
+import { ProgressBar } from 'primereact/progressbar';
+import { Tag } from 'primereact/tag';
+import { Skeleton } from 'primereact/skeleton';
+import { ProyectoService } from '@/src/services';
 
-const lineData: ChartData = {
-    labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
-    datasets: [
-        {
-            label: 'First Dataset',
-            data: [65, 59, 80, 81, 56, 55, 40],
-            fill: false,
-            backgroundColor: '#2f4860',
-            borderColor: '#2f4860',
-            tension: 0.4
-        },
-        {
-            label: 'Second Dataset',
-            data: [28, 48, 40, 19, 86, 27, 90],
-            fill: false,
-            backgroundColor: '#00bb7e',
-            borderColor: '#00bb7e',
-            tension: 0.4
-        }
-    ]
-};
+export default function DashboardEjecutivo() {
 
-const Dashboard = () => {
-    const [products, setProducts] = useState<Demo.Product[]>([]);
-    const menu1 = useRef<Menu>(null);
-    const menu2 = useRef<Menu>(null);
-    const [lineOptions, setLineOptions] = useState<ChartOptions>({});
-    const { layoutConfig } = useContext(LayoutContext);
+	const [dashboardData, setDashboardData] = useState<any>(null);
+	const [barData, setBarData] = useState<any>(null);
+	const [donutData, setDonutData] = useState<any>(null);
+	const [loading, setLoading] = useState(true);
+	// Hook para refrescar el token de autenticación
+	//const { refreshAuth } = useAuthRefresh({ interval: 300000, checkOnMount: true, checkOnFocus: true });
+	// Gráfica: Proyectos por departamento
 
-    const applyLightTheme = () => {
-        const lineOptions: ChartOptions = {
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#495057'
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: {
-                        color: '#495057'
-                    },
-                    grid: {
-                        color: '#ebedef'
-                    }
-                },
-                y: {
-                    ticks: {
-                        color: '#495057'
-                    },
-                    grid: {
-                        color: '#ebedef'
-                    }
-                }
-            }
-        };
+	const barOptions = {
+		indexAxis: 'y',
+		plugins: { 
+			legend: { display: false },
+			datalabels: {
+				display: false,
+				anchor: 'end',
+				align: 'end',
+				color: '#374151',
+				font: {
+					weight: 'bold',
+					size: 12
+				},
+			}
+		},
+		scales: {
+			x: { 
+				grid: { color: '#f3f4f6' }, 
+				ticks: { 
+					color: '#64748b',
+					stepSize: 1
+				},
+				title: {
+					display: true,
+					text: 'Total de proyectos'
+				}
+			},
+			y: { 
+				grid: { color: '#f3f4f6' }, 
+				ticks: { color: '#64748b' },
+				display: true,
+			},
+		},
+		responsive: true,
+		maintainAspectRatio: false,
+	};
 
-        setLineOptions(lineOptions);
-    };
+	const donutOptions = {
+		cutout: '80%',
+		plugins: {
+			legend: { display: false },
+			tooltip: { enabled: false },
+		},
+		responsive: true,
+		maintainAspectRatio: true,
+	};
 
-    const applyDarkTheme = () => {
-        const lineOptions = {
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#ebedef'
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: {
-                        color: '#ebedef'
-                    },
-                    grid: {
-                        color: 'rgba(160, 167, 181, .3)'
-                    }
-                },
-                y: {
-                    ticks: {
-                        color: '#ebedef'
-                    },
-                    grid: {
-                        color: 'rgba(160, 167, 181, .3)'
-                    }
-                }
-            }
-        };
+	useEffect(() => {
+		const fetchData = async () => {
+			setLoading(true);
+			try {
+				const res = await ProyectoService.getDashboardEjecutivo();
+				const data = res.data;
+				setDashboardData(data);
 
-        setLineOptions(lineOptions);
-    };
+				// configurar la gráfica de barras con los datos recibidos
+				setBarData({
+					labels: data?.proyectos_por_departamento.map((d: any) => d.departamento_nombre),
+					datasets: [
+						{
+							label: 'Proyectos',
+							backgroundColor: '#6366f1',
+							data: data?.proyectos_por_departamento.map((d: any) => d.total_proyectos),
+							borderRadius: 8,
+						},
+					],
+				});
 
-    useEffect(() => {
-        ProductService.getProductsSmall().then((data) => setProducts(data));
-    }, []);
+				setDonutData({
+					labels: ['Avance', 'Restante'],
+					datasets: [
+						{
+							data: [
+								data?.resumen_general?.porcentaje_avance_global || 0, 
+								100 - (data?.resumen_general?.porcentaje_avance_global || 0)
+							],
+							backgroundColor: ['#22c55e', '#e5e7eb'],
+							borderWidth: 0,
+						},
+					],
+				});
+			} catch (error) {
+				console.error('Error fetching dashboard data:', error);
+			} finally {
+				setLoading(false);
+			}
+		};
 
-    useEffect(() => {
-        if (layoutConfig.colorScheme === 'light') {
-            applyLightTheme();
-        } else {
-            applyDarkTheme();
-        }
-    }, [layoutConfig.colorScheme]);
+		fetchData();
+	}, []); // El array vacío asegura que esto se ejecute solo una vez al montar el componente
 
-    const formatCurrency = (value: number) => {
-        return value?.toLocaleString('en-US', {
-            style: 'currency',
-            currency: 'USD'
-        });
-    };
+	// Componente Skeleton para cards
+	const CardSkeleton = () => (
+		<div className="card border-round-xl shadow-2 bg-white mb-0">
+			<div className="flex align-items-center gap-3 mb-2">
+				<Skeleton shape="circle" size="3rem" />
+				<Skeleton width="60%" height="1.5rem" />
+			</div>
+			<Skeleton width="80%" height="2rem" className="mb-2" />
+			<Skeleton width="50%" height="1rem" />
+		</div>
+	);
 
-    return (
-        <div className="grid">
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Orders</span>
-                            <div className="text-900 font-medium text-xl">152</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-blue-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-shopping-cart text-blue-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">24 new </span>
-                    <span className="text-500">since last visit</span>
-                </div>
-            </div>
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Revenue</span>
-                            <div className="text-900 font-medium text-xl">$2.100</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-orange-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-map-marker text-orange-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">%52+ </span>
-                    <span className="text-500">since last week</span>
-                </div>
-            </div>
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Customers</span>
-                            <div className="text-900 font-medium text-xl">28441</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-cyan-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-inbox text-cyan-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">520 </span>
-                    <span className="text-500">newly registered</span>
-                </div>
-            </div>
-            <div className="col-12 lg:col-6 xl:col-3">
-                <div className="card mb-0">
-                    <div className="flex justify-content-between mb-3">
-                        <div>
-                            <span className="block text-500 font-medium mb-3">Comments</span>
-                            <div className="text-900 font-medium text-xl">152 Unread</div>
-                        </div>
-                        <div className="flex align-items-center justify-content-center bg-purple-100 border-round" style={{ width: '2.5rem', height: '2.5rem' }}>
-                            <i className="pi pi-comment text-purple-500 text-xl" />
-                        </div>
-                    </div>
-                    <span className="text-green-500 font-medium">85 </span>
-                    <span className="text-500">responded</span>
-                </div>
-            </div>
+	// Componente Skeleton para gráfica de barras
+	const ChartSkeleton = () => (
+		<div className="card border-round-xl shadow-2 bg-white mb-0" style={{ minHeight: 220 }}>
+			<div className="flex align-items-center gap-3 mb-3">
+				<Skeleton shape="circle" size="2rem" />
+				<Skeleton width="40%" height="1.5rem" />
+			</div>
+			<div style={{ height: 180 }}>
+				<Skeleton width="100%" height="100%" />
+			</div>
+		</div>
+	);
 
-            <div className="col-12 xl:col-6">
-                <div className="card">
-                    <h5>Recent Sales</h5>
-                    <DataTable value={products} rows={5} paginator responsiveLayout="scroll">
-                        <Column header="Image" body={(data) => <img className="shadow-2" src={`/demo/images/product/${data.image}`} alt={data.image} width="50" />} />
-                        <Column field="name" header="Name" sortable style={{ width: '35%' }} />
-                        <Column field="price" header="Price" sortable style={{ width: '35%' }} body={(data) => formatCurrency(data.price)} />
-                        <Column
-                            header="View"
-                            style={{ width: '15%' }}
-                            body={() => (
-                                <>
-                                    <Button icon="pi pi-search" text />
-                                </>
-                            )}
-                        />
-                    </DataTable>
-                </div>
-                <div className="card">
-                    <div className="flex justify-content-between align-items-center mb-5">
-                        <h5>Best Selling Products</h5>
-                        <div>
-                            <Button type="button" icon="pi pi-ellipsis-v" rounded text className="p-button-plain" onClick={(event) => menu1.current?.toggle(event)} />
-                            <Menu
-                                ref={menu1}
-                                popup
-                                model={[
-                                    { label: 'Add New', icon: 'pi pi-fw pi-plus' },
-                                    { label: 'Remove', icon: 'pi pi-fw pi-minus' }
-                                ]}
-                            />
-                        </div>
-                    </div>
-                    <ul className="list-none p-0 m-0">
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Space T-Shirt</span>
-                                <div className="mt-1 text-600">Clothing</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-orange-500 h-full" style={{ width: '50%' }} />
-                                </div>
-                                <span className="text-orange-500 ml-3 font-medium">%50</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Portal Sticker</span>
-                                <div className="mt-1 text-600">Accessories</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-cyan-500 h-full" style={{ width: '16%' }} />
-                                </div>
-                                <span className="text-cyan-500 ml-3 font-medium">%16</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Supernova Sticker</span>
-                                <div className="mt-1 text-600">Accessories</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-pink-500 h-full" style={{ width: '67%' }} />
-                                </div>
-                                <span className="text-pink-500 ml-3 font-medium">%67</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Wonders Notebook</span>
-                                <div className="mt-1 text-600">Office</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-green-500 h-full" style={{ width: '35%' }} />
-                                </div>
-                                <span className="text-green-500 ml-3 font-medium">%35</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Mat Black Case</span>
-                                <div className="mt-1 text-600">Accessories</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-purple-500 h-full" style={{ width: '75%' }} />
-                                </div>
-                                <span className="text-purple-500 ml-3 font-medium">%75</span>
-                            </div>
-                        </li>
-                        <li className="flex flex-column md:flex-row md:align-items-center md:justify-content-between mb-4">
-                            <div>
-                                <span className="text-900 font-medium mr-2 mb-1 md:mb-0">Robots T-Shirt</span>
-                                <div className="mt-1 text-600">Clothing</div>
-                            </div>
-                            <div className="mt-2 md:mt-0 ml-0 md:ml-8 flex align-items-center">
-                                <div className="surface-300 border-round overflow-hidden w-10rem lg:w-6rem" style={{ height: '8px' }}>
-                                    <div className="bg-teal-500 h-full" style={{ width: '40%' }} />
-                                </div>
-                                <span className="text-teal-500 ml-3 font-medium">%40</span>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-            </div>
+	// Componente Skeleton para listas
+	const ListSkeleton = () => (
+		<div className="card border-round-xl shadow-2 bg-white mb-0">
+			<div className="flex align-items-center gap-3 mb-3">
+				<Skeleton shape="circle" size="2rem" />
+				<Skeleton width="50%" height="1.5rem" />
+			</div>
+			<div className="flex flex-column gap-3">
+				{Array.from({ length: 3 }).map((_, idx) => (
+					<div key={idx} className="flex align-items-center gap-3 p-3 border-1 border-round surface-border">
+						<Skeleton width="60%" height="1rem" />
+						<Skeleton width="80px" height="1.5rem" />
+						<Skeleton width="80px" height="10px" />
+						<Skeleton width="40px" height="1rem" />
+					</div>
+				))}
+			</div>
+		</div>
+	);
 
-            <div className="col-12 xl:col-6">
-                <div className="card">
-                    <h5>Sales Overview</h5>
-                    <Chart type="line" data={lineData} options={lineOptions} />
-                </div>
+	// Componente para estado vacío
+	const EmptyState = ({ icon, title, description }: { icon: string, title: string, description: string }) => (
+		<div className="flex flex-column align-items-center justify-content-center p-6 text-center">
+			<i className={`${icon} text-6xl text-300 mb-3`} />
+			<h3 className="text-900 font-semibold mb-2">{title}</h3>
+			<p className="text-600 m-0">{description}</p>
+		</div>
+	);
 
-                <div className="card">
-                    <div className="flex align-items-center justify-content-between mb-4">
-                        <h5>Notifications</h5>
-                        <div>
-                            <Button type="button" icon="pi pi-ellipsis-v" rounded text className="p-button-plain" onClick={(event) => menu2.current?.toggle(event)} />
-                            <Menu
-                                ref={menu2}
-                                popup
-                                model={[
-                                    { label: 'Add New', icon: 'pi pi-fw pi-plus' },
-                                    { label: 'Remove', icon: 'pi pi-fw pi-minus' }
-                                ]}
-                            />
-                        </div>
-                    </div>
+	return (
+		<div className="grid">
+			{/* Tarjetas resumen */}
+			
+			<div className="col-12 md:col-6 xl:col-2">
+				{loading ? (
+					<CardSkeleton />
+				) : (
+					<div className="card border-round-xl shadow-2 bg-white mb-0" style={{ position: 'relative' }}>
+						<div className="flex align-items-center gap-3 mb-2">
+							<i className="pi pi-chart-pie text-3xl text-green-500" />
+							<span className="text-lg font-semibold text-green-700">Avance global</span>
+						</div>
+						{dashboardData?.resumen_general ? (
+							<>
+								<div style={{ height: 90, width: 90, margin: '0 auto', position: 'relative' }}>
+									<Chart type="doughnut" data={donutData} options={donutOptions} />
+									<div style={{
+										position: 'absolute',
+										left: 0,
+										right: 0,
+										top: 0,
+										bottom: 0,
+										display: 'flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										pointerEvents: 'none',
+										fontSize: 24,
+										fontWeight: 700,
+										color: '#22c55e',
+									}}>{dashboardData?.resumen_general?.porcentaje_avance_global || 0}%</div>
+								</div>
+								<span className="text-500 text-justify">de avance en todos los proyectos</span>
+							</>
+						) : (
+							<EmptyState 
+								icon="pi pi-chart-pie" 
+								title="Sin datos" 
+								description="No hay información de avance disponible"
+							/>
+						)}
+					</div>
+				)}
+			</div>
+			<div className="col-12 md:col-6 xl:col-3">
+				{loading ? (
+					<CardSkeleton />
+				) : (
+					<div className="card border-round-xl shadow-2 bg-white mb-0">
+						<div className="flex align-items-center gap-3 mb-2">
+							<i className="pi pi-folder-open text-2xl text-primary-500" />
+							<span className="text-lg font-semibold text-primary-800">Proyectos registrados</span>
+						</div>
+						{dashboardData?.resumen_general ? (
+							<>
+								<div className="text-4xl font-bold text-primary-700 mb-1">
+									{dashboardData?.resumen_general?.total_proyectos || 0}
+								</div>
+								<span className="text-500">en {dashboardData?.resumen_general?.departamentos_participantes} departamentos</span>
+							</>
+						) : (
+							<EmptyState 
+								icon="pi pi-folder-open" 
+								title="Sin proyectos" 
+								description="No hay proyectos registrados"
+							/>
+						)}
+					</div>
+				)}
+			</div>
+			<div className="col-12 md:col-12 xl:col-7">
+				{loading ? (
+					<ChartSkeleton />
+				) : (
+					<div className="card border-round-xl shadow-2 bg-white mb-0" style={{ minHeight: 220 }}>
+						<div className="flex align-items-center gap-3 mb-3">
+							<i className="pi pi-building text-2xl text-blue-500" />
+							<span className="text-lg font-semibold text-blue-700">Proyectos por departamento</span>
+						</div>
+						{dashboardData?.proyectos_por_departamento?.length > 0 ? (
+							<div style={{ height: 180 }}>
+								<Chart type="bar" data={barData} options={barOptions} />
+							</div>
+						) : (
+							<EmptyState 
+								icon="pi pi-building" 
+								title="Sin datos por departamento" 
+								description="No hay proyectos distribuidos por departamentos"
+							/>
+						)}
+					</div>
+				)}
+			</div>
 
-                    <span className="block text-600 font-medium mb-3">TODAY</span>
-                    <ul className="p-0 mx-0 mt-0 mb-4 list-none">
-                        <li className="flex align-items-center py-2 border-bottom-1 surface-border">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-blue-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-dollar text-xl text-blue-500" />
-                            </div>
-                            <span className="text-900 line-height-3">
-                                Richard Jones
-                                <span className="text-700">
-                                    {' '}
-                                    has purchased a blue t-shirt for <span className="text-blue-500">79$</span>
-                                </span>
-                            </span>
-                        </li>
-                        <li className="flex align-items-center py-2">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-orange-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-download text-xl text-orange-500" />
-                            </div>
-                            <span className="text-700 line-height-3">
-                                Your request for withdrawal of <span className="text-blue-500 font-medium">2500$</span> has been initiated.
-                            </span>
-                        </li>
-                    </ul>
 
-                    <span className="block text-600 font-medium mb-3">YESTERDAY</span>
-                    <ul className="p-0 m-0 list-none">
-                        <li className="flex align-items-center py-2 border-bottom-1 surface-border">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-blue-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-dollar text-xl text-blue-500" />
-                            </div>
-                            <span className="text-900 line-height-3">
-                                Keyser Wick
-                                <span className="text-700">
-                                    {' '}
-                                    has purchased a black jacket for <span className="text-blue-500">59$</span>
-                                </span>
-                            </span>
-                        </li>
-                        <li className="flex align-items-center py-2 border-bottom-1 surface-border">
-                            <div className="w-3rem h-3rem flex align-items-center justify-content-center bg-pink-100 border-circle mr-3 flex-shrink-0">
-                                <i className="pi pi-question text-xl text-pink-500" />
-                            </div>
-                            <span className="text-900 line-height-3">
-                                Jane Davis
-                                <span className="text-700"> has posted a new questions about your product.</span>
-                            </span>
-                        </li>
-                    </ul>
-                </div>
-                <div
-                    className="px-4 py-5 shadow-2 flex flex-column md:flex-row md:align-items-center justify-content-between mb-3"
-                    style={{
-                        borderRadius: '1rem',
-                        background: 'linear-gradient(0deg, rgba(0, 123, 255, 0.5), rgba(0, 123, 255, 0.5)), linear-gradient(92.54deg, #1C80CF 47.88%, #FFFFFF 100.01%)'
-                    }}
-                >
-                    <div>
-                        <div className="text-blue-100 font-medium text-xl mt-2 mb-3">TAKE THE NEXT STEP</div>
-                        <div className="text-white font-medium text-5xl">Try PrimeBlocks</div>
-                    </div>
-                    <div className="mt-4 mr-auto md:mt-0 md:mr-0">
-                        <Link href="https://blocks.primereact.org" className="p-button font-bold px-5 py-3 p-button-warning p-button-rounded p-button-raised">
-                            Get Started
-                        </Link>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
+			{/* Proyectos con mas actividades */}
+			<div className="col-12 xl:col-6">
+				{loading ? (
+					<ListSkeleton />
+				) : (
+					<div className="card border-round-xl shadow-2 bg-white mb-0">
+						<div className="flex align-items-center gap-3 mb-3">
+							<i className="pi pi-star text-2xl text-yellow-500" />
+							<span className="text-lg font-semibold text-yellow-700">Proyectos con mas actividades</span>
+						</div>
+						{dashboardData?.proyectos_prioritarios?.length > 0 ? (
+							<div className="flex flex-column gap-3">
+								{dashboardData?.proyectos_prioritarios?.map((p:any) => (
+									<div
+										key={p.nombre}
+										className="flex align-items-center gap-3 p-3 border-1 border-round surface-border bg-yellow-50"
+									>
+										<span className="text-900 font-medium flex-1">{p.nombre}</span>
+										<Tag
+											value={p.total_actividades + ' actividades'}
+											severity="warning"
+										/>
+										<ProgressBar
+											value={p.porcentaje_avance}
+											showValue={false}
+											style={{ width: 80, height: 10 }}
+											className="mx-2"
+										/>
+										<span className="text-700 font-semibold">{p.porcentaje_avance}%</span>
+									</div>
+								))}
+							</div>
+						) : (
+							<EmptyState 
+								icon="pi pi-star" 
+								title="Sin proyectos prioritarios" 
+								description="No hay proyectos con actividades registradas"
+							/>
+						)}
+					</div>
+				)}
+			</div>
 
-export default Dashboard;
+			{/* Últimas actividades */}
+			<div className="col-12 xl:col-6">
+				{loading ? (
+					<ListSkeleton />
+				) : (
+					<div className="card border-round-xl shadow-2 bg-white mb-0">
+						<div className="flex align-items-center gap-3 mb-3">
+							<i className="pi pi-clock text-2xl text-gray-500" />
+							<span className="text-lg font-semibold text-gray-700">Últimas actividades completadas</span>
+						</div>
+						{dashboardData?.ultimas_actividades_completadas?.length > 0 ? (
+							<ul className="list-none p-0 m-0">
+								{dashboardData?.ultimas_actividades_completadas.map((a:any, idx:number) => (
+									<li key={idx} className="flex align-items-center gap-3 py-2 border-bottom-1 surface-border">
+										<i className="pi pi-check-circle text-green-500 text-xl" />
+										<div className="flex flex-column">
+											<span className="text-900 font-medium">{a.nombre}</span>
+											<span className="text-700 text-sm">
+												{a.proyecto_nombre} &middot; {a.responsable_nombre}
+											</span>
+										</div>
+										<span className="ml-auto text-500 text-xs">{a.fecha_completada}</span>
+									</li>
+								))}
+							</ul>
+						) : (
+							<EmptyState 
+								icon="pi pi-clock" 
+								title="Sin actividades recientes" 
+								description="No hay actividades completadas recientemente"
+							/>
+						)}
+					</div>
+				)}
+			</div>
+			{/* Avance de actividades por proyecto */}
+			<div className="col-12 xl:col-6">
+				{loading ? (
+					<ListSkeleton />
+				) : (
+					<div className="card border-round-xl shadow-2 bg-white mb-0">
+						<div className="flex align-items-center gap-3 mb-3">
+							<i className="pi pi-list text-2xl text-cyan-500" />
+							<span className="text-lg font-semibold text-cyan-700">Avance de actividades por proyecto</span>
+						</div>
+						{dashboardData?.ultimos_proyectos?.length > 0 ? (
+							<div className="flex flex-column gap-3">
+								{dashboardData?.ultimos_proyectos?.map((p:any) => (
+									<div key={p.nombre} className="flex align-items-center gap-3">
+										<span className="w-10rem text-900 font-medium">{p.nombre}</span>
+										<ProgressBar value={p.porcentaje_avance} showValue className="flex-1" style={{ height: 18 }} />
+										<span className="text-700 font-semibold ml-2">{p.porcentaje_avance}%</span>
+									</div>
+								))}
+							</div>
+						) : (
+							<EmptyState 
+								icon="pi pi-list" 
+								title="Sin avance de proyectos" 
+								description="No hay información de avance disponible"
+							/>
+						)}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}

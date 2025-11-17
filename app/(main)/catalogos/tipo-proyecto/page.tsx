@@ -10,20 +10,29 @@ import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { confirmPopup } from 'primereact/confirmpopup';
+import { MenuItem } from 'primereact/menuitem';
 
-import { useAuth } from '@/layout/context/authContext';
+// Components
+import { PermissionGuard } from '@/src/components/PermissionGuard';
+import { AccessDenied } from '@/src/components/AccessDenied';
+import CustomBreadcrumb from '@/src/components/CustomBreadcrumb';
+
+// Services, Hooks, Contexts, Types
 import { useNotification } from '@/layout/context/notificationContext';
-
-
-import type { Demo } from '@/types';
+import type { TipoProyecto } from '@/types';
 import { TipoProyectoService } from '@/src/services/catalogos';
+import { usePermissions } from '@/src/hooks/usePermissions';
 import { generateUUID } from '@/src/utils'
 
 
 const TipoProyectoPage = () => {
 
-    const router = useRouter();
-    const [tiposProyectos, setTiposProyectos] = useState<Demo.Customer[]>([]);
+    const { isSuperAdmin, canUpdate, canDelete, canCreate } = usePermissions();
+    const accessCreate = isSuperAdmin || canCreate('catalogos.tipos_proyecto');
+    const accessEdit = isSuperAdmin || canUpdate('catalogos.tipos_proyecto');
+    const accessDelete = isSuperAdmin || canDelete('catalogos.tipos_proyecto');
+
+    const [tiposProyectos, setTiposProyectos] = useState<TipoProyecto[]>([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<DataTableFilterMeta>({});
     const [globalFilterValue, setGlobalFilterValue] = useState('');
@@ -32,7 +41,6 @@ const TipoProyectoPage = () => {
     const [loadingSaveRows, setLoadingSaveRows] = useState<any>({});
     const [deletingRows, setDeletingRows] = useState<any>({});
     const [rowErrors, setRowErrors] = useState<{ [key: string]: string | null }>({});
-    const { isAuthenticated } = useAuth();
     const { showError, showSuccess } = useNotification();
     
 
@@ -66,12 +74,14 @@ const TipoProyectoPage = () => {
                     </span>
                     </div>
                     <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                        <Button
-                            className="w-auto" 
-                            type="button" 
-                            icon="pi pi-plus" 
-                            label="Agregar" 
-                            onClick={onAgregar}/>
+                        {accessCreate && (
+                            <Button
+                                className="w-auto" 
+                                type="button" 
+                                icon="pi pi-plus" 
+                                label="Agregar" 
+                                onClick={onAgregar}/>
+                        )}
                     </div>
             </div>
         );
@@ -98,28 +108,29 @@ const TipoProyectoPage = () => {
 
     useEffect(() => {
 
-        setLoading(true);
-
-        TipoProyectoService.getListTipoProyecto().then((response) => {
-            const filtrados = response.data.map((tipoProyecto:any) => {
-                return {
-                    ...tipoProyecto,
-                    keyString:generateUUID()
-                }
-            });
-            setTiposProyectos(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-
-    }, []);
-
-    useEffect(() => {
-    
-        if (!loading && !isAuthenticated) {
-            router.replace('/auth/login');
+        const fetchTipoProyectos = async () => {
+            try {
+                const response = await TipoProyectoService.getListTipoProyecto();
+                const filtrados = response.data.map((tipoProyecto:any) => {
+                    return {
+                        ...tipoProyecto,
+                        keyString:generateUUID()
+                    }
+                });
+                setTiposProyectos(filtrados);
+                initFilters();
+            } catch (error:any) {
+                const message = error?.response?.data?.message || error?.message || 'Error al cargar los tipos de proyecto';
+                showError('Error', message);
+                setTiposProyectos([]);
+            } finally {
+                setLoading(false);
+            }
         }
-    }, [isAuthenticated, loading]);
+
+        fetchTipoProyectos();
+
+    }, [showError]);
 
     const initFilters = () => {
 
@@ -396,73 +407,95 @@ const TipoProyectoPage = () => {
     
             return (
                 <div className="flex align-items-center justify-content-center gap-2">
-                    <Button
-                        icon="pi pi-pencil" 
-                        size='small'
-                        onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
-                    />
-                    <Button
-                        icon="pi pi-trash" 
-                        size='small'
-                        severity='danger'
-                        loading={deletingRows[rowData.keyString]}
-                        onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-                    />
+                    {accessEdit && (
+                        <Button
+                            icon="pi pi-pencil" 
+                            size='small'
+                            onClick={() => customHandlers.onInit({ data: rowData, index: options.rowIndex })} 
+                        />
+                    )}
+                    {accessDelete && (
+                         <Button
+                            icon="pi pi-trash" 
+                            size='small'
+                            severity='danger'
+                            loading={deletingRows[rowData.keyString]}
+                            onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
+                        />
+                    )}
                 </div>
             );
         }
     };
 
+    // Breadcrumb items
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Catálogos', icon: 'pi pi-briefcase' },
+        { label: 'Tipos de proyecto', icon: 'pi pi-user-edit' }
+    ];
+
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de tipos proyectos</h5>
-                    <DataTable
-                        value={tiposProyectos}
-                        paginator
-                        rows={10}
-                        dataKey="keyString"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No customers found."
-                        editMode='row'
-                        editingRows={rowsEditing}
-                        onRowEditInit={onRowEditInit}
-                        onRowEditCancel={onRowEditCancel}
-                        onRowEditChange={e => setRowsEditing(e.data)}
-                        header={header}
-                    >
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            editor={(options) => textEditor(options)}
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            editor={(options) => textAreaEditor(options)}
-                            style={{ maxWidth: '8rem' }}
-                            />                        
-                        <Column 
-                            rowEditor
-                            body={(rowData, options) => rowEditorTemplate(rowData, options, {
-                                onInit:onRowEditInit,
-                                onSave:handleSave,
-                                onCancel:onRowEditCancel,
-                                onDelete:handleDelete,
-                                isEditing: !!rowsEditing[rowData.keyString]
-                            })}
-                            bodyClassName="text-center" 
-                            
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+        <PermissionGuard
+                    resource='catalogos.tipos_proyecto'
+                    action='acceso'
+                    fallback={<AccessDenied message='No tiene permisos para acceder a este modulo.'/>}>
+            <div className="grid">
+                <div className="col-12">
+                    <CustomBreadcrumb
+                            items={breadcrumbItems}
+                            theme="green"
+                            title="Catálogo de Tipos de proyecto"
+                            description="Administra el catálogo de tipos de proyecto"
+                            icon="pi pi-th-large"
+                    />
+                    <div className="bg-white border border-gray-200  overflow-hidden border-round-xl shadow-2 bg-white">
+                        <DataTable
+                            value={tiposProyectos}
+                            paginator
+                            rows={10}
+                            dataKey="keyString"
+                            filters={filters}
+                            filterDisplay="menu"
+                            loading={loading}
+                            emptyMessage="No se encontraron registros."
+                            editMode='row'
+                            editingRows={rowsEditing}
+                            onRowEditInit={onRowEditInit}
+                            onRowEditCancel={onRowEditCancel}
+                            onRowEditChange={e => setRowsEditing(e.data)}
+                            header={header}
+                        >
+                            <Column 
+                                field="nombre" 
+                                header="Nombre" 
+                                editor={(options) => textEditor(options)}
+                                filter 
+                                filterPlaceholder="Busqueda por nombre" 
+                                style={{ maxWidth: '4rem' }} /> 
+                            <Column 
+                                field="descripcion" 
+                                header="Descripción" 
+                                editor={(options) => textAreaEditor(options)}
+                                style={{ maxWidth: '8rem' }}
+                                />                        
+                            <Column 
+                                rowEditor
+                                body={(rowData, options) => rowEditorTemplate(rowData, options, {
+                                    onInit:onRowEditInit,
+                                    onSave:handleSave,
+                                    onCancel:onRowEditCancel,
+                                    onDelete:handleDelete,
+                                    isEditing: !!rowsEditing[rowData.keyString]
+                                })}
+                                bodyClassName="text-center" 
+                                
+                                style={{ maxWidth: '2rem' }} />
+                        </DataTable>
+                    </div>
                 </div>
             </div>
-        </div>
+        </PermissionGuard>
+        
     );
 };
 

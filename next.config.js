@@ -1,19 +1,24 @@
 /** @type {import('next').NextConfig} */
 
 const nextConfig = {
-    reactStrictMode: false,
-    async rewrites() {
+    reactStrictMode: true,
+    experimental: {
+    missingSuspenseWithCSRBailout: false,
+  },
+  async rewrites() {
         return [
             {
-                source: '/sanctum/csrf-cookie', // Rutas que tu frontend local usará
-                destination: 'https://deicapi.codisoft.com.mx/sanctum/csrf-cookie', // La URL real de tu API externa
+                source: '/sanctum/csrf-cookie',
+                destination: 'https://deicapi.codisoft.com.mx/sanctum/csrf-cookie',
             },
             {
-                source: '/api/:path*', // Rutas que tu frontend local usará
-                destination: 'https://deicapi.codisoft.com.mx/api/:path*', // La URL real de tu API externa
+                source: '/api/:path*',
+                destination: 'https://deicapi.codisoft.com.mx/api/:path*',
             }
         ]
-    }
+    },
 };
+
+
 
 module.exports = nextConfig

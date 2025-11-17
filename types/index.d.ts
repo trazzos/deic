@@ -24,6 +24,37 @@ import {
     AppMenuItem
 } from './layout';
 import { Demo, LayoutType, SortOrderType, CustomEvent, ChartDataState, ChartOptionsState, AppMailSidebarItem, AppMailReplyProps, AppMailProps } from './demo';
+import { 
+    Autoridad,
+    Beneficiario,
+    Capacitador,
+    Departamento,
+    TipoActividad,
+    TipoDocumento,
+    TipoProyecto,
+} from './catalogo';
+import { Persona, Usuario } from './persona';
+import { 
+    ReporteProyecto, 
+    ReporteTipoProyecto,
+    ActividadReporte, 
+    FiltrosReporte, 
+    DetalleProyecto, 
+    ActividadDetalle, 
+    TareaDetalle 
+} from './reporte';
+
+import {
+    Secretaria,
+    Subsecretaria,
+    Direccion
+} from './organizacion';
+
+import {
+    Proyecto
+} from './proyecto';
+
+import { Organizacion } from './organizacion';
 
 type ChildContainerProps = {
     children: ReactNode;
@@ -58,5 +89,25 @@ export type {
     AppMailSidebarItem,
     AppMailReplyProps,
     AppMailProps,
-    AppMenuItem
+    AppMenuItem,
+    Autoridad,
+    Beneficiario,
+    Capacitador,
+    Departamento,
+    TipoActividad,
+    TipoDocumento,
+    TipoProyecto,
+    Persona,
+    Usuario,
+    ReporteProyecto,
+    ReporteTipoProyecto,
+    ActividadReporte,
+    FiltrosReporte,
+    DetalleProyecto,
+    ActividadDetalle,
+    TareaDetalle,
+    Secretaria,
+    Subsecretaria,
+    Direccion,
+    Proyecto
 };

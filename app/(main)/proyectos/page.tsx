@@ -1,64 +1,683 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { FilterMatchMode, FilterOperator } from 'primereact/api';
-import { useRouter } from 'next/navigation';
 import * as Yup from 'yup';
+import jsPDF from 'jspdf';
 
-import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
-import { Column } from 'primereact/column';
+import { ProgressBar } from 'primereact/progressbar';
+import { Panel } from 'primereact/panel';
+import { Checkbox } from 'primereact/checkbox';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
-import { InputTextarea } from 'primereact/inputtextarea';
-import { Dropdown } from 'primereact/dropdown';
 import { confirmPopup } from 'primereact/confirmpopup';
-import { Sidebar } from 'primereact/sidebar';
+import { ProgressSpinner } from 'primereact/progressspinner';
+import { Avatar } from 'primereact/avatar';
+import { Tag } from 'primereact/tag';
+import { DataScroller } from 'primereact/datascroller';
+import { MenuItem } from "primereact/menuitem";
+import { Badge } from 'primereact/badge';
+
+// Components
+import FormularioActividad  from './FormularioActividad'
+import FormularioProyecto from './FormularioProyecto';
+import EmptyStateProject from './components/EmptyStateProject';
+import EmptyStateActivity from './components/EmptyStateActivity';
+import RepositorioDocumentos from './components/RepositorioDocumentos';
+import FiltroProyectos from './components/FiltroProyectos';
+import { CustomBreadcrumb } from '@/src/components/CustomBreadcrumb';
+import PermissionGuard from "@/src/components/PermissionGuard";
+import AccessDenied from "@/src/components/AccessDenied";
+
+// Services, Hooks, Contexts, Types, Schemas
+import { 
+    ProyectoService,
+    DependenciaProyectoService,
+} from '@/src/services';
+import type { Proyecto } from '@/types';
+import { schemaProyecto, schemaActividad, createSchemaProyecto } from '@/src/schemas/proyecto';
 import { useNotification } from '@/layout/context/notificationContext';
-
-import { DepartamentoService, TipoProyectoService } from '@/src/services/catalogos';
-import { ProyectoService } from '@/src/services/proyecto';
-import { generateUUID } from '@/src/utils'
+import { useFormErrorHandler } from '@/src/utils/errorUtils';
+import { usePermissions } from "@/src/hooks/usePermissions";
 
 
-interface Proyecto {
-    uuid:string|null,
-    tipoProyecto:number|null,
-    departamento:number|null,
-    nombre:string,
-    descripcion:string
-}
+const tiposBeneficiados = [
+    { label: 'Hombre', value: 'Hombre' },
+    { label: 'Mujer', value: 'Mujer' },
+    { label: 'Otro', value: 'Otro' },
+];
+
+const prioridades = [
+    { label: 'Alta', value: 'Alta' },
+    { label: 'Media', value: 'Media' },
+    { label: 'Baja', value: 'Baja' }
+];
+
 const ProyectoPage = () => {
 
-    const router = useRouter();
+    //Accesos
+    const { isSuperAdmin, canUpdate, canDelete, canCreate, canManage, hasPermission } = usePermissions();
+    const accessCreateProyecto = isSuperAdmin || canCreate('gestion_proyectos.proyectos');
+    const accessEditProyecto = isSuperAdmin || canUpdate('gestion_proyectos.proyectos');
+    const accessDeleteProyecto = isSuperAdmin || canDelete('gestion_proyectos.proyectos');
+
+
+    const accessManageActividades = isSuperAdmin || canManage('gestion_proyectos.proyectos.actividades');
+    const accessCreateActividad = isSuperAdmin || canCreate('gestion_proyectos.proyectos.actividades');
+    const accessEditActividad = isSuperAdmin || canUpdate('gestion_proyectos.proyectos.actividades');
+    const accessDeleteActividad = isSuperAdmin || canDelete('gestion_proyectos.proyectos.actividades');
+
+    const accessManageTareas = isSuperAdmin || canManage('gestion_proyectos.proyectos.checklist');
+    const accessCreateTarea = isSuperAdmin || canCreate('gestion_proyectos.proyectos.checklist');
+    const accessEditTarea = isSuperAdmin || canUpdate('gestion_proyectos.proyectos.checklist');
+    const accessDeleteTarea = isSuperAdmin || canDelete('gestion_proyectos.proyectos.checklist');
+    const accessCompleteTarea = isSuperAdmin || hasPermission('gestion_proyectos.proyectos.checklist.completar');
+
     const [proyectos, setProyectos] = useState<any[]>([]);
     const [departamentos, setDepartamentos] = useState<any[]>([]);
     const [tiposProyecto, setTiposProyecto] = useState<any[]>([]);
+    const [tiposDocumento, setTiposDocumento] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingGuardar, setLoadingGuardar] = useState(false);
+    const [loadingGuardarActividad, setLoadingGuardarActividad] = useState(false);
     const [visibleFormulario, setVisibleFormulario] = useState(false);
-    const [filters, setFilters] = useState<DataTableFilterMeta>({});
-    const [globalFilterValue, setGlobalFilterValue] = useState('');
     const [deletingRows, setDeletingRows] = useState<any>({});
+    const [formularioActividad, setFormularioActividad] = useState<any>({});
     const { showError, showSuccess } = useNotification();
-    
-    
-    const formularioSchema = Yup.object().shape({
-        tipoProyecto: Yup.string().required('El tipo de proyecto es obligatorio'),
-        departamento: Yup.string().required('El departamento es obligatorio'),
-        nombre: Yup.string().required('El nombre es obligatorio'),
-        descripcion: Yup.string().required('La descripción es obligatoria'),
-    });
 
+    // Estado para el repositorio de documentos
+    const [visibleRepositorioDocumentos, setVisibleRepositorioDocumentos] = useState(false);
+
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(5);
+    const [hasMore, setHasMore] = useState(true);
+    const [openPanelActividad, setOpenPanelActividad] = useState(false);
+    const [openPanelProyecto, setOpenPanelProyecto] = useState(false);
+    const [showDetailPanel, setShowDetailPanel] = useState(true);
+
+    // Estados para filtros
+    const [showFilters, setShowFilters] = useState(false);
+    const [filtros, setFiltros] = useState({
+        tipoProyecto: null,
+        departamento: null,
+        estatus: null
+    });
+    const [proyectosFiltrados, setProyectosFiltrados] = useState<any[]>([]);
+
+    // Proyectos
+    const [proyectoActivo, setProyectoActivo] = useState<any>({});
     const initStateFormularioProyecto = {
         uuid:null,
         tipoProyecto:null,
+        monto:null,
         departamento:null,
         nombre: '',
         descripcion: '',
     };
     const [formularioProyecto, setFormularioProyecto] = useState<Proyecto>(initStateFormularioProyecto);
     const [formularioErrors, setFormularioErrors] = useState<{ [key: string]: string }>({});
+    const [loadingActividadesProyecto, setLoadingActividadesProyecto] = useState(false);
 
-    // Handlers
+    // Actividades
+    const [actividades, setActividades] = useState<any>([]);
+    const [actividadSeleccionada, setActividadSeleccionada] = useState<any>({});
+    const [visibleFormularioActividad, setVisibleFormularioActividad] = useState(false);
+    const [formularioActividadErrors, setFormularioActividadErrors] = useState<{ [key: string]: string }>({});
+    const [tiposActividad, setTiposActividad] = useState<any>([]);  
+    const [beneficiarios, setBeneficiarios] = useState<any>([]);  
+    const [autoridades, setAutoridades] = useState<any>([]);  
+    const [responsables, setResponsables] = useState<any>([]);  
+    const [capacitadores, setCapacitadores] = useState<any>([]);  
+    const [actividadCollapsed, setActividadCollapsed] = useState<{ [key: string]: boolean }>({});
+    const [nuevaTareaActividad, setNuevaTareaActividad] = useState<{ [key: string]: string }>({});
+    const [loadingTareasActividad, setLoadingTareasActividad] = useState<{ [key: string]: boolean }>({});
+
+    // Cache para actividades y tareas por proyecto
+    const [actividadesPorProyecto, setActividadesPorProyecto] = useState<{ [key: string]: any[] }>({});
+    const [tareasPorProyecto, setTareasPorProyecto] = useState<{ [key: string]: { [key: string]: any[] } }>({});
+    
+    // Seguimiento de proyectos que han sido cargados con actividades para cálculo de avance
+    const [proyectosCargados, setProyectosCargados] = useState<Set<string>>(new Set());
+    
+    // Tareas del proyecto activo (para mantener compatibilidad con el código existente)
+    const [tareasPorActividad, setTareasPorActividad] = useState<any>({});
+  
+    // Función para calcular si una actividad está completada (todas sus tareas están completadas)
+    const isActividadCompletada = (actividadUuid: string, proyectoUuid?: string): boolean => {
+        const proyectoId = proyectoUuid || proyectoActivo?.uuid;
+        
+        // Buscar las tareas en el caché del proyecto específico
+        const tareasDelProyecto = tareasPorProyecto[proyectoId];
+        const tareas = tareasDelProyecto?.[actividadUuid] || [];
+        
+        // Si hay tareas cargadas, calcular basándose en ellas
+        if (tareas.length > 0) {
+            return tareas.every((tarea: any) => tarea.estatus === 'Completada');
+        }
+        
+        // Si no hay tareas cargadas, usar el porcentaje_avance del backend
+        // Buscar la actividad en las actividades cargadas o en caché
+        const actividadesDelProyecto = actividadesPorProyecto[proyectoId] || 
+                                     (proyectoId === proyectoActivo?.uuid ? actividades : []);
+        
+        const actividad = actividadesDelProyecto.find((act: any) => act.uuid === actividadUuid);
+        if (actividad && typeof actividad.porcentaje_avance === 'number') {
+            // Considerar completada si el avance es 100%
+            return actividad.porcentaje_avance >= 100;
+        }
+        
+        // Por defecto, no completada si no hay información
+        return false;
+    };
+
+    // Función para calcular el avance de una actividad específica
+    const calcularAvanceActividad = (actividadUuid: string, proyectoUuid?: string): number => {
+        const proyectoId = proyectoUuid || proyectoActivo?.uuid;
+        
+        // Buscar las tareas en el caché del proyecto específico
+        const tareasDelProyecto = tareasPorProyecto[proyectoId];
+        const tareas = tareasDelProyecto?.[actividadUuid] || [];
+        
+        // Si hay tareas cargadas, calcular basándose en ellas
+        if (tareas.length > 0) {
+            const tareasCompletadas = tareas.filter((tarea: any) => tarea.estatus === 'Completada').length;
+            return Math.round((tareasCompletadas / tareas.length) * 100);
+        }
+        
+        // Si no hay tareas cargadas, usar el porcentaje_avance del backend
+        const actividadesDelProyecto = actividadesPorProyecto[proyectoId] || 
+                                     (proyectoId === proyectoActivo?.uuid ? actividades : []);
+        
+        const actividad = actividadesDelProyecto.find((act: any) => act.uuid === actividadUuid);
+        if (actividad && typeof actividad.porcentaje_avance === 'number') {
+            return actividad.porcentaje_avance;
+        }
+        
+        // Por defecto, 0% si no hay información
+        return 0;
+    };
+
+    // Función para calcular el avance del proyecto basado en actividades completadas
+    // Una actividad se considera completada cuando todas sus tareas están marcadas como 'Completada'
+    // El avance se calcula como: (actividades completadas / total actividades) * 100
+    const calcularAvanceProyecto = (proyectoUuid?: string): number => {
+        const proyectoParaCalcular = proyectoUuid || proyectoActivo?.uuid;
+        
+        if (!proyectoParaCalcular) return 0;
+
+        // Si tenemos actividades en caché para este proyecto, usarlas para el cálculo
+        const actividadesDelProyecto = actividadesPorProyecto[proyectoParaCalcular] || 
+                                     (proyectoParaCalcular === proyectoActivo?.uuid ? actividades : []);
+
+        // Si el proyecto ha sido cargado previamente y tenemos actividades en caché, usar cálculo basado en actividades
+        if (proyectosCargados.has(proyectoParaCalcular) && actividadesDelProyecto.length > 0) {
+            const actividadesCompletadas = actividadesDelProyecto.filter((actividad: any) => 
+                isActividadCompletada(actividad.uuid, proyectoParaCalcular)
+            ).length;
+            
+            return Math.round((actividadesCompletadas / actividadesDelProyecto.length) * 100);
+        }
+
+        // Para proyectos no activos que no han sido cargados, usar porcentaje del backend
+        if (proyectoUuid && proyectoUuid !== proyectoActivo?.uuid && !proyectosCargados.has(proyectoParaCalcular)) {
+            const proyecto = proyectos.find(p => p.uuid === proyectoUuid);
+            if (proyecto && typeof proyecto.porcentaje_avance === 'number') {
+                return proyecto.porcentaje_avance;
+            }
+        }
+
+        // Si no hay actividades cargadas, usar el valor del backend si está disponible
+        if (!actividadesDelProyecto || actividadesDelProyecto.length === 0) {
+            const proyecto = proyectos.find(p => p.uuid === proyectoParaCalcular);
+            if (proyecto && typeof proyecto.porcentaje_avance === 'number') {
+                return proyecto.porcentaje_avance;
+            }
+            return 0;
+        }
+        
+        // Cálculo basado en actividades para el proyecto activo
+        const actividadesCompletadas = actividadesDelProyecto.filter((actividad: any) => 
+            isActividadCompletada(actividad.uuid, proyectoParaCalcular)
+        ).length;
+        
+        return Math.round((actividadesCompletadas / actividadesDelProyecto.length) * 100);
+    };
+
+    // Función para verificar si una actividad está vencida
+    const isActividadVencida = (actividad: any): boolean => {
+        if (!actividad.fecha_fin) return false;
+        
+        const fechaFin = new Date(actividad.fecha_fin);
+        const fechaActual = new Date();
+        
+        // Comparar solo fechas (sin horas)
+        fechaFin.setHours(23, 59, 59, 999);
+        fechaActual.setHours(0, 0, 0, 0);
+        
+        return fechaActual > fechaFin;
+    };
+
+    // Función para ordenar actividades
+    const ordenarActividades = (actividades: any[]): any[] => {
+        return [...actividades].sort((a, b) => {
+            // Primero ordenar por fecha_inicio (descendente)
+            const fechaInicioA = new Date(a.fecha_inicio || '1900-01-01');
+            const fechaInicioB = new Date(b.fecha_inicio || '1900-01-01');
+            
+            if (fechaInicioA.getTime() !== fechaInicioB.getTime()) {
+                return fechaInicioB.getTime() - fechaInicioA.getTime(); // Descendente
+            }
+            
+            // Si las fechas de inicio son iguales, ordenar por fecha_fin (descendente)
+            const fechaFinA = new Date(a.fecha_fin || '1900-01-01');
+            const fechaFinB = new Date(b.fecha_fin || '1900-01-01');
+            
+            return fechaFinB.getTime() - fechaFinA.getTime(); // Descendente
+        });
+    };
+
+    // Función para exportar actividad a PDF
+    const exportarActividadAPDF = () => {
+        if (!actividadSeleccionada?.uuid) {
+            showError('No hay actividad seleccionada para exportar');
+            return;
+        }
+
+        try {
+            const pdf = new jsPDF();
+            
+            // Configuración del documento
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            let currentY = 20;
+            const marginLeft = 20;
+            const marginRight = 20;
+            const availableWidth = pageWidth - marginLeft - marginRight;
+
+            // Helper function para agregar texto con wrap
+            const addWrappedText = (text: string, x: number, y: number, maxWidth: number, fontSize: number = 10) => {
+                pdf.setFontSize(fontSize);
+                const lines = pdf.splitTextToSize(text, maxWidth);
+                pdf.text(lines, x, y);
+                return y + (lines.length * fontSize * 0.4);
+            };
+
+            // Helper function para verificar si necesita nueva página
+            const checkNewPage = (requiredSpace: number) => {
+                if (currentY + requiredSpace > pageHeight - 20) {
+                    pdf.addPage();
+                    currentY = 20;
+                }
+            };
+
+            // Encabezado del documento
+            pdf.setFontSize(18);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('FICHA TÉCNICA DE ACTIVIDAD', pageWidth/2, currentY, { align: 'center' });
+            currentY += 15;
+
+            // Línea divisoria
+            pdf.setLineWidth(0.5);
+            pdf.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+            currentY += 10;
+
+            // Información del proyecto
+            pdf.setFontSize(14);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('INFORMACIÓN DEL PROYECTO', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+            pdf.setFont(undefined, 'normal');
+            
+            // Proyecto
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Proyecto:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(proyectoActivo?.nombre || 'N/A', marginLeft + 30, currentY, availableWidth - 30);
+            currentY += 5;
+
+            // Dependencia
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Departamento:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(proyectoActivo?.departamento_nombre || 'N/A', marginLeft + 35, currentY, availableWidth - 35);
+            currentY += 5;
+
+            // Monto (solo para proyectos de inversión)
+            if (proyectoActivo?.monto && proyectoActivo?.tipo_proyecto_nombre && 
+                (proyectoActivo.tipo_proyecto_nombre.toLowerCase().includes('inversión') || 
+                 proyectoActivo.tipo_proyecto_nombre.toLowerCase().includes('inversion'))) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Monto de Inversión:', marginLeft, currentY);
+                pdf.setFont(undefined, 'normal');
+                const montoFormateado = new Intl.NumberFormat('es-MX', {
+                    style: 'currency',
+                    currency: 'MXN'
+                }).format(proyectoActivo.monto);
+                pdf.text(montoFormateado, marginLeft + 50, currentY);
+                currentY += 5;
+            }
+            currentY += 5;
+
+            checkNewPage(50);
+
+            // Información de la actividad
+            pdf.setFontSize(14);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('INFORMACIÓN DE LA ACTIVIDAD', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+            
+            // Nombre de la actividad
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Nombre:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(actividadSeleccionada.nombre || 'N/A', marginLeft + 25, currentY, availableWidth - 25);
+            currentY += 5;
+
+            // Descripción
+            if (actividadSeleccionada.descripcion) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Descripción:', marginLeft, currentY);
+                pdf.setFont(undefined, 'normal');
+                currentY = addWrappedText(actividadSeleccionada.descripcion, marginLeft + 35, currentY, availableWidth - 35);
+                currentY += 5;
+            }
+
+            // Información en dos columnas
+            const col1X = marginLeft;
+            const col2X = pageWidth / 2 + 10;
+            const colWidth = (availableWidth - 10) / 2;
+
+            checkNewPage(80);
+
+            // Fechas y estado
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('CRONOGRAMA Y ESTADO', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+
+            // Fechas
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Fecha de inicio:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString('es-ES') : 'N/A', col1X, currentY + 7);
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Fecha de fin:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString('es-ES') : 'N/A', col2X, currentY + 7);
+            currentY += 20;
+
+            // Prioridad y tipo
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Prioridad:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.prioridad || 'N/A', col1X, currentY + 7);
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Tipo de actividad:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(actividadSeleccionada.tipo_actividad_nombre || 'N/A', col2X, currentY + 7, colWidth);
+            currentY += 15;
+
+            checkNewPage(80);
+
+            // Participantes
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('PARTICIPANTES', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+
+            // Responsable
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Responsable:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.responsable_nombre || 'N/A', col1X, currentY + 7);
+
+            // Capacitador
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Capacitador:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(actividadSeleccionada.capacitador_nombre || 'N/A', col2X, currentY + 7);
+            currentY += 20;
+
+            // Beneficiario
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Beneficiario:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            currentY = addWrappedText(actividadSeleccionada.beneficiario_nombre || 'N/A', marginLeft + 35, currentY, availableWidth - 35);
+            currentY += 10;
+
+            // Beneficiarios por tipo
+            if (actividadSeleccionada.persona_beneficiada && Array.isArray(actividadSeleccionada.persona_beneficiada)) {
+                pdf.setFont(undefined, 'bold');
+                pdf.text('Distribución de beneficiarios:', marginLeft, currentY);
+                currentY += 7;
+
+                actividadSeleccionada.persona_beneficiada.forEach((persona: any) => {
+                    pdf.setFont(undefined, 'normal');
+                    pdf.text(`• ${persona.nombre === 'Mujer' ? 'Mujeres' : persona.nombre + 's'}: ${persona.total}`, marginLeft + 10, currentY);
+                    currentY += 5;
+                });
+                currentY += 5;
+            }
+
+            checkNewPage(60);
+
+            // Avance de tareas
+            const tareasActividad = tareasPorActividad[actividadSeleccionada.uuid] || [];
+            const tareasCompletadas = tareasActividad.filter((t: any) => t.estatus === 'Completada').length;
+            const porcentajeAvance = tareasActividad.length > 0 ? Math.round((tareasCompletadas / tareasActividad.length) * 100) : (actividadSeleccionada.porcentaje_avance || 0);
+
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('AVANCE DE ACTIVIDAD', marginLeft, currentY);
+            currentY += 8;
+
+            pdf.setFontSize(10);
+
+            // Estadísticas de tareas
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Total de tareas:', col1X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(String(tareasActividad.length || actividadSeleccionada.total_tareas || 0), col1X, currentY + 7);
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Tareas completadas:', col2X, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(String(tareasCompletadas || actividadSeleccionada.tareas_completadas || 0), col2X, currentY + 7);
+            currentY += 20;
+
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Porcentaje de avance:', marginLeft, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`${porcentajeAvance}%`, marginLeft + 50, currentY);
+            currentY += 15;
+
+            // Lista de tareas si están cargadas
+            if (tareasActividad.length > 0) {
+                checkNewPage(40 + (tareasActividad.length * 5));
+
+                pdf.setFontSize(12);
+                pdf.setFont(undefined, 'bold');
+                pdf.text('LISTA DE TAREAS', marginLeft, currentY);
+                currentY += 8;
+
+                pdf.setFontSize(9);
+
+                tareasActividad.forEach((tarea: any, index: number) => {
+                    const status = tarea.estatus === 'Completada' ? 'Completada' : 'Pendiente';
+                    const color = tarea.estatus === 'Completada' ? [0, 128, 0] : [128, 128, 128];
+                    
+                    pdf.setTextColor(color[0], color[1], color[2]);
+                    pdf.text(`${index + 1}. ${tarea.nombre}(${status})`, marginLeft + 5, currentY);
+                    pdf.setTextColor(0, 0, 0); // Reset color
+                    currentY += 5;
+
+                    if (currentY > pageHeight - 30) {
+                        pdf.addPage();
+                        currentY = 20;
+                    }
+                });
+                currentY += 10;
+            }
+
+            // Footer con fecha de generación
+            const fechaGeneracion = new Date().toLocaleDateString('es-ES', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            pdf.setFontSize(8);
+            pdf.setTextColor(128, 128, 128);
+            pdf.text(`Documento generado el ${fechaGeneracion}`, marginLeft, pageHeight - 10);
+
+            // Guardar el PDF
+            const nombreArchivo = `Ficha_Actividad_${actividadSeleccionada.nombre.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+            pdf.save(nombreArchivo);
+
+            showSuccess('PDF generado exitosamente');
+
+        } catch (error) {
+            console.error('Error al generar PDF:', error);
+            showError('Error al generar el PDF');
+        }
+    };
+
+    // Funciones para gestión del caché
+    const updateActividadesCache = (proyectoUuid: string, nuevasActividades: any[]) => {
+        setActividadesPorProyecto(prev => ({
+            ...prev,
+            [proyectoUuid]: nuevasActividades
+        }));
+        
+        // Marcar el proyecto como cargado para permitir cálculo de avance con caché
+        setProyectosCargados(prev => {
+            const newSet = new Set(prev);
+            newSet.add(proyectoUuid);
+            return newSet;
+        });
+    };
+
+    const updateTareasCache = (proyectoUuid: string, actividadUuid: string, nuevasTareas: any[]) => {
+        setTareasPorProyecto(prev => ({
+            ...prev,
+            [proyectoUuid]: {
+                ...prev[proyectoUuid],
+                [actividadUuid]: nuevasTareas
+            }
+        }));
+        
+        // También actualizar el estado local si es el proyecto activo
+        if (proyectoUuid === proyectoActivo?.uuid) {
+            setTareasPorActividad((prev: any) => ({
+                ...prev,
+                [actividadUuid]: nuevasTareas
+            }));
+        }
+    };
+
+    const loadTareasFromCache = (proyectoUuid: string) => {
+        const tareasDelProyecto = tareasPorProyecto[proyectoUuid] || {};
+        setTareasPorActividad(tareasDelProyecto);
+    };
+
+    // Función para invalidar caché cuando sea necesario
+    const invalidarCacheProyecto = (proyectoUuid: string) => {
+        setActividadesPorProyecto(prev => {
+            const newCache = { ...prev };
+            delete newCache[proyectoUuid];
+            return newCache;
+        });
+        
+        setTareasPorProyecto(prev => {
+            const newCache = { ...prev };
+            delete newCache[proyectoUuid];
+            return newCache;
+        });
+    };
+
+    // Función para actualizar el avance del proyecto en la lista después de cambios
+    const actualizarAvanceProyectoEnLista = (proyectoUuid: string) => {
+        if (proyectoUuid === proyectoActivo?.uuid) {
+            const nuevoAvance = calcularAvanceProyecto(proyectoUuid);
+            setProyectos(prev => prev.map(proyecto => 
+                proyecto.uuid === proyectoUuid 
+                    ? { ...proyecto, porcentaje_avance: nuevoAvance }
+                    : proyecto
+            ));
+        }
+    };
+
+    // Función para refrescar el avance desde el backend (opcional)
+    const refrescarAvanceDesdeBackend = async (proyectoUuid: string) => {
+        try {
+            const response = await ProyectoService.getProyecto(proyectoUuid);
+            const proyectoActualizado = response.data;
+            
+            setProyectos(prev => prev.map(proyecto => 
+                proyecto.uuid === proyectoUuid 
+                    ? { ...proyecto, porcentaje_avance: proyectoActualizado.porcentaje_avance }
+                    : proyecto
+            ));
+        } catch (error) {
+            console.error('Error al refrescar avance desde backend:', error);
+        }
+    };
+
+    // Función para actualizar el avance de una actividad en el caché
+    const actualizarAvanceActividadEnCache = (proyectoUuid: string, actividadUuid: string) => {
+        const nuevoAvance = calcularAvanceActividad(actividadUuid, proyectoUuid);
+        
+        // Obtener información de tareas si están cargadas
+        const tareasDelProyecto = tareasPorProyecto[proyectoUuid];
+        const tareas = tareasDelProyecto?.[actividadUuid] || [];
+        
+        // Preparar datos actualizados
+        let datosActualizados: any = { porcentaje_avance: nuevoAvance };
+        
+        // Si hay tareas cargadas, actualizar también los contadores
+        if (tareas.length > 0) {
+            const tareasCompletadas = tareas.filter((tarea: any) => tarea.estatus === 'Completada').length;
+            const tareasPendientes = tareas.length - tareasCompletadas;
+            
+            datosActualizados = {
+                ...datosActualizados,
+                total_tareas: tareas.length,
+                tareas_completadas: tareasCompletadas,
+                tareas_pendientes: tareasPendientes
+            };
+        }
+        
+        // Actualizar en el caché de actividades
+        setActividadesPorProyecto(prev => ({
+            ...prev,
+            [proyectoUuid]: prev[proyectoUuid]?.map(actividad => 
+                actividad.uuid === actividadUuid 
+                    ? { ...actividad, ...datosActualizados }
+                    : actividad
+            ) || []
+        }));
+        
+        // También actualizar en el estado local si es el proyecto activo
+        if (proyectoUuid === proyectoActivo?.uuid) {
+            setActividades((prev: any) => prev.map((actividad: any) => 
+                actividad.uuid === actividadUuid 
+                    ? { ...actividad, ...datosActualizados }
+                    : actividad
+            ));
+        }
+    };
+    
+    // Handlers proyectos
     const handleFormularioChange = (e: any) => {
 
         const name = e.target?.name ?? e.originalEvent?.target?.name;
@@ -74,20 +693,33 @@ const ProyectoPage = () => {
         setLoadingGuardar(true);
 
         try {
-          
-            await formularioSchema.validate(formularioProyecto, { abortEarly: false });
+            // Usar esquema dinámico basado en el tipo de proyecto
+            const schemaDinamico = createSchemaProyecto(tiposProyecto, formularioProyecto.tipoProyecto || undefined);
+            await schemaDinamico.validate(formularioProyecto, { abortEarly: false });
             setFormularioErrors({});
 
             const contexto =  {
                 tipo_proyecto_id: formularioProyecto.tipoProyecto,
                 departamento_id: formularioProyecto.departamento,
-                nombre:formularioProyecto.nombre,
-                descripcion: formularioProyecto.descripcion
+                nombre: formularioProyecto.nombre,
+                descripcion: formularioProyecto.descripcion,
+                ...(formularioProyecto.monto && { monto: formularioProyecto.monto })
             }
             const response:any = formularioProyecto.uuid 
                 ? await ProyectoService.updateProyecto(formularioProyecto.uuid, contexto)
                 : await ProyectoService.createProyecto(contexto);
             const proyecto = await response.data;
+
+            if(!formularioProyecto.uuid) {
+
+                setActividadSeleccionada({});
+                setActividades([]);
+                setProyectoActivo((prev:any) => ({
+                    ...prev,
+                    ...proyecto,
+                }));
+
+            }
 
             updateRows(proyecto);
             showSuccess('Proyecto guardado correctamente');
@@ -124,6 +756,18 @@ const ProyectoPage = () => {
                     let { data, index } = e;
                     setDeletingRows({ [data.uuid]: true });
                     await ProyectoService.deleteProyecto(data.uuid);
+
+                    // Check if the deleted project is the currently selected one
+                    if (proyectoActivo.uuid === data.uuid) {
+                        // Reset the selected project and panels
+                        setProyectoActivo({});
+                        setOpenPanelProyecto(false);
+                        setOpenPanelActividad(false);
+                        // Clear activities and tasks for the deleted project
+                        setActividades([]);
+                        setTareasPorActividad({});
+                    }
+
                     updateRows(data, true);
                     cleanRowsDeleting(data);
                     showSuccess('Proyecto eliminado correctamente');
@@ -136,84 +780,117 @@ const ProyectoPage = () => {
             },
         });
     }
-    
-    const onGlobalFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            const value = e.target.value;
-            let _filters = { ...filters };
-            (_filters['global'] as any).value = value;
-    
-            setFilters(_filters);
-            setGlobalFilterValue(value);
-    };
-    
-    const clearFilter = () => {
-        initFilters();
-    };
 
     const onAgregar = () => {
-
       setFormularioProyecto(initStateFormularioProyecto);  
       setVisibleFormulario(true);  
     }
 
-    useEffect(() => {
+    const loadMoreProyectos = async () => {
+
+        if (!hasMore || loading) return;
 
         setLoading(true);
-        
-        DepartamentoService.getListDepartamento()
-        .then((response) => {
-            setDepartamentos(response.data);
-        })
-        .catch((_error) => {
-            console.log('catch','Error al cargar departamentos')
-        });
 
-        TipoProyectoService.getListTipoProyecto()
-        .then((response) => {
-            setTiposProyecto(response.data);
-        })
-        .catch((_error) => {
-            console.log('catch','Error al cargar tipos de proyecto')
-        });
-        
-
-        ProyectoService.getListProyecto().then((response) => {
-            const filtrados = response.data.map((proyecto:any) => {
-                return {
-                    ...proyecto,
-                }
-            });
-            setProyectos(filtrados);
-            setLoading(false);
-            initFilters();
-        });
-    }, []);
-
-    const initFilters = () => {
-
-        setFilters({
-            global: { value: null, matchMode: FilterMatchMode.CONTAINS },
-            nombre: {
-                operator: FilterOperator.AND,
-                constraints: [{ value: null, matchMode: FilterMatchMode.STARTS_WITH }]
+        try {
+            // Construir parámetros incluyendo filtros activos
+            const params: any = {
+                page: page + 1,
+                per_page: perPage
+            };
+            
+            // Agregar filtros si están activos
+            if (filtros.tipoProyecto) {
+                params.tipo_proyecto_id = filtros.tipoProyecto;
             }
-        });
-        setGlobalFilterValue('');
+            if (filtros.departamento) {
+                params.departamento_id = filtros.departamento;
+            }
+            if (filtros.estatus) {
+                params.estatus = filtros.estatus;
+            }
+            
+            const response = await ProyectoService.paginateProyecto(params);
+            
+            if (response.data.length === 0) {
+                setHasMore(false);
+            } else {
+                setProyectos(prev => [...prev, ...response.data]);
+                setPage(prev => prev + 1);
+                // Si devolvió menos registros que perPage, no hay más páginas
+                setHasMore(response.data.length >= perPage);
+            }
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const cleanRowsDeleting = (data:any) => {
+    const handleResetControlsProyecto  = () => {
+        setFormularioProyecto(initStateFormularioProyecto);
+        setFormularioErrors({});
+        setVisibleFormulario(false);
+        setProyectoActivo({});
+        setShowDetailPanel(false);
+        // No resetear proyectosCargados aquí para mantener el caché de avance
+    };
 
-        setDeletingRows((prev:any) => {
-            const newRowsDeleting = { ...prev };
-            delete newRowsDeleting[data.uuid];
-            return newRowsDeleting;
-        });
-    }
+    const onEditProyecto = (e:any) => {
+
+        const data = e.data;
+        setFormularioProyecto((_prev:any) => ({
+            uuid:data.uuid,
+            tipoProyecto:data.tipo_proyecto_id,
+            departamento: data.departamento_id,
+            nombre:data.nombre,
+            descripcion: data.descripcion,
+            monto: data.monto || null
+        }));
+        setVisibleFormulario(true);
+       
+    };
+
+    const onSelectProyecto = async (proyecto:any) => {
+       if(!accessManageActividades)
+            return;
+
+        const data = proyecto;
+        setProyectoActivo(data);
+        setOpenPanelProyecto(true);
+        setOpenPanelActividad(false);
+        setShowDetailPanel(true); // Show the detail panel when a project is selected
+        
+        // Verificar si ya tenemos las actividades en caché
+        const actividadesEnCache = actividadesPorProyecto[data.uuid];
+        
+        if (actividadesEnCache) {
+            // Usar datos del caché y ordenarlos
+            const actividadesOrdenadas = ordenarActividades(actividadesEnCache);
+            setActividades(actividadesOrdenadas);
+            loadTareasFromCache(data.uuid);
+            setLoadingActividadesProyecto(false);
+        } else {
+            // Cargar desde el servidor y guardar en caché
+            setLoadingActividadesProyecto(true);
+            try {
+                const responseActividades = await ProyectoService.getListaActividadesPorProyectoUuid(data?.uuid);
+                const nuevasActividades = responseActividades.data;
+                const actividadesOrdenadas = ordenarActividades(nuevasActividades);
+                
+                setActividades(actividadesOrdenadas);
+                updateActividadesCache(data.uuid, actividadesOrdenadas);
+                
+                // Limpiar tareas del proyecto activo
+                setTareasPorActividad({});
+            } catch (error) {
+                console.error('Error al cargar actividades:', error);
+            } finally {
+                setLoadingActividadesProyecto(false);
+            }
+        }
+    };
 
     const updateRows = (data:any, isDelete:boolean=false) => {
-
         setProyectos((prev:any) => {
-
             let updatedProyectos = [...prev];
             const index = updatedProyectos.findIndex((pro) => pro.uuid === data.uuid);
 
@@ -227,217 +904,1565 @@ const ProyectoPage = () => {
                 } else {
                     updatedProyectos = [...updatedProyectos, data];
                 }
-                
+            }
+            // Si el proyecto actualizado es el activo, actualizar también el estado
+            if (proyectoActivo?.uuid === data.uuid) {
+                setProyectoActivo((prev:any) => ({ ...prev, ...data }));
+                setFormularioProyecto((prev:any) => ({ ...prev, ...data }));
             }
             return updatedProyectos;
         });
     }
 
-    const onEditProyecto = (e:any) => {
+    // handlers actividades
+    const handleActividadesError = useFormErrorHandler(setFormularioActividadErrors, showError);
+    const handleSaveDataActividad = async () => {   
+        
+        setLoadingGuardarActividad(true);
 
-        const data = e.data;
-        setFormularioProyecto((_prev:any) => ({
-            uuid:data.uuid,
-            tipoProyecto:data.tipo_proyecto_id,
-            departamento: data.departamento_id,
-            nombre:data.nombre,
-            descripcion: data.descripcion
+        try {
+
+            await schemaActividad.validate(formularioActividad, { abortEarly: false });
+            setFormularioActividadErrors({});
+
+            const contexto =  {
+                ...formularioActividad,
+                fecha_inicio: formularioActividad.fecha_inicio ? formularioActividad.fecha_inicio?.toISOString().slice(0, 10) : null,
+                fecha_fin: formularioActividad.fecha_fin ? formularioActividad.fecha_fin?.toISOString().slice(0, 10) : null,
+                fecha_solicitud_constancia: formularioActividad.fecha_solicitud_constancia ? formularioActividad.fecha_solicitud_constancia?.toISOString().slice(0, 10) : null,
+                fecha_envio_constancia: formularioActividad.fecha_envio_constancia ? formularioActividad.fecha_envio_constancia?.toISOString().slice(0, 10) : null,
+                fecha_vencimiento_envio_encuesta: formularioActividad.fecha_vencimiento_envio_encuesta ? formularioActividad.fecha_vencimiento_envio_encuesta?.toISOString().slice(0, 10) : null,
+                fecha_envio_encuesta: formularioActividad.fecha_envio_encuesta ? formularioActividad.fecha_envio_encuesta?.toISOString().slice(0, 10) : null,
+                fecha_copy_creativo: formularioActividad.fecha_copy_creativo ? formularioActividad.fecha_copy_creativo?.toISOString().slice(0, 10) : null,
+                fecha_inicio_difusion_banner: formularioActividad.fecha_inicio_difusion_banner ? formularioActividad.fecha_inicio_difusion_banner?.toISOString().slice(0, 10) : null,
+                fecha_fin_difusion_banner: formularioActividad.fecha_fin_difusion_banner ? formularioActividad.fecha_fin_difusion_banner?.toISOString().slice(0, 10) : null,
+                persona_beneficiada: Array.isArray(formularioActividad.persona_beneficiada)
+                    ? formularioActividad.persona_beneficiada
+                    : ((): any[] => {
+                        try {
+                            const raw = formularioActividad.persona_beneficiada;
+                            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                            if (Array.isArray(parsed)) return parsed;
+                            if (parsed && typeof parsed === 'object') {
+                                return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: Number(parsed[k]) || 0 }));
+                            }
+                        } catch {}
+                        return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: 0 }));
+                    })(),
+                link_drive: formularioActividad.link_drive || '',
+                link_registro: formularioActividad.link_registro || '',
+                link_zoom: formularioActividad.link_zoom || '',
+                link_panelista: formularioActividad.link_panelista || ''
+            }
+        
+            const response:any = formularioActividad.uuid
+                ? await ProyectoService.updateActividadPorProyectoUuid(proyectoActivo.uuid, formularioActividad.uuid, contexto)
+                : await ProyectoService.createActividadPorProyectoUuid(proyectoActivo?.uuid, contexto);
+
+            const actividad = await response.data;
+
+            updateActividades(actividad);
+            setFormularioActividad({});
+            setVisibleFormularioActividad(false);
+            showSuccess('El registro se ha guardado correctamente');
+
+        } catch (err: any) {
+            // Si la validación falla, Yup lanza un error con la propiedad 'inner' que contiene los errores individuales
+            if (err.inner) {
+                const errors: { [key: string]: string } = {};
+                err.inner.forEach((validationError: any) => {
+                    if (validationError.path) {
+                        errors[validationError.path] = validationError.message;
+                    }
+                });
+                setFormularioActividadErrors(errors);
+            } else {
+               handleActividadesError(err);
+            }
+        } finally {
+            setLoadingGuardarActividad(false);
+        };
+    }
+    
+    const onEditActividad = (e:any) => {
+
+        const data = e.item.itemData;
+
+        setFormularioActividadErrors({});
+        setFormularioActividad({});
+        setFormularioActividad((_prev:any) => ({
+            ...data,
+            autoridad_participante: Array.isArray(data.autoridad_participante) ?  data.autoridad_participante.map((item:string) => parseInt(item)) : [],
+            fecha_inicio: data.fecha_inicio ? new Date(data.fecha_inicio) : null,
+            fecha_fin: data.fecha_fin ? new Date(data.fecha_fin) : null,
+            fecha_solicitud_constancia: data.fecha_solicitud_constancia ? new Date(data.fecha_solicitud_constancia) : null,
+            fecha_envio_constancia: data.fecha_envio_constancia ? new Date(data.fecha_envio_constancia) : null,
+            fecha_vencimiento_envio_encuesta: data.fecha_vencimiento_envio_encuesta ? new Date(data.fecha_vencimiento_envio_encuesta) : null,   
+            fecha_envio_encuesta: data.fecha_envio_encuesta ? new Date(data.fecha_envio_encuesta) : null,
+            fecha_copy_creativo: data.fecha_copy_creativo ? new Date(data.fecha_copy_creativo) : null,
+            fecha_inicio_difusion_banner: data.fecha_inicio_difusion_banner ? new Date(data.fecha_inicio_difusion_banner) : null,
+            fecha_fin_difusion_banner: data.fecha_fin_difusion_banner ? new Date(data.fecha_fin_difusion_banner) : null,
+            persona_beneficiada: (() => {
+                const raw = data.persona_beneficiada;
+                try {
+                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    if (Array.isArray(parsed)) return parsed;
+                    if (parsed && typeof parsed === 'object') {
+                        return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: Number(parsed[k]) || 0 }));
+                    }
+                } catch {
+                    return ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: 0 }));
+                }
+            })(),
         }));
-        setVisibleFormulario(true);
+        
+    
+        setVisibleFormularioActividad(true);
+    }
+
+    const onAgregarActividad = () => {
+        setFormularioActividad({
+            id: null,
+            proyecto_id: null,
+            nombre: '',
+            descripcion: '',
+            fecha_inicio: null,
+            fecha_fin: null,
+            estado: 'pendiente',
+            persona_beneficiada: ['Hombre','Mujer','Otro'].map((k) => ({ nombre: k, total: 0 }))
+        });
+        setVisibleFormularioActividad(true);
+    };
+
+    const onDeleteActividad = (event:any, e:any) => {
+        confirmPopup({
+            target: event.currentTarget,
+            message: '¿Esta seguro de realizar esta acción?',
+            icon: 'pi pi-exclamation-triangle',
+            acceptLabel: 'Si',
+            rejectLabel: 'No',
+            accept: () => {
+                ProyectoService.deleteActividadPorProyecto(proyectoActivo.uuid, e.itemData.uuid)
+                    .then(() => {
+                        // Remove from current activities list
+                        setActividades((prev: any) => prev.filter((act: any) => act.uuid !== e.itemData.uuid));
+                        
+                        // Remove from activities cache for this project
+                        setActividadesPorProyecto(prev => ({
+                            ...prev,
+                            [proyectoActivo.uuid]: prev[proyectoActivo.uuid]?.filter((act: any) => act.uuid !== e.itemData.uuid) || []
+                        }));
+                        
+                        // Remove tasks for this activity from cache
+                        setTareasPorProyecto(prev => {
+                            const newCache = { ...prev };
+                            if (newCache[proyectoActivo.uuid]) {
+                                const { [e.itemData.uuid]: deletedActivityTasks, ...restTasks } = newCache[proyectoActivo.uuid];
+                                newCache[proyectoActivo.uuid] = restTasks;
+                            }
+                            return newCache;
+                        });
+                        
+                        // Reset selected activity if it's the one being deleted
+                        if (actividadSeleccionada.uuid === e.itemData.uuid) {
+                            setActividadSeleccionada({});
+                            setOpenPanelActividad(false);
+                            setOpenPanelProyecto(true);
+                        }
+                        
+                        showSuccess('Actividad eliminada correctamente');
+                    })
+                    .catch((error: any) => showError(error.message || 'Ha ocurrido un error al eliminar la actividad'));
+            }
+        });
+    }
+
+    const handleResetControlsActividad = () => {
+
+        setActividades([]);
+        setFormularioActividad({});
+        setActividadSeleccionada({});
+        setFormularioActividadErrors({});
+    }
+
+    useEffect(() => {
+
+        handleResetControlsProyecto();
+        handleResetControlsActividad();
+        setLoading(true);
+
+        const fetchCatalogos = async () => {
+            try {
+                // Ejecutar las peticiones de forma concurrente: dependencias y proyectos
+                const [
+                    responseDependencias,
+                    responseProyectos
+                ] = await Promise.all([
+                    DependenciaProyectoService.getAll(),
+                    ProyectoService.paginateProyecto({ page: 1, per_page: perPage })
+                ]);
+
+                // Extraer los catálogos de la respuesta de dependencias
+                const dependencias = responseDependencias.data;
+                
+                // Actualizar todos los estados con los datos de dependencias
+                setDepartamentos(dependencias.departamentos || []);
+                setTiposDocumento(dependencias.tipos_documento || []);
+                setTiposProyecto(dependencias.tipos_proyecto || []);
+                setTiposActividad(dependencias.tipos_actividad || []);
+                setBeneficiarios(dependencias.beneficiarios || []);
+                setAutoridades(dependencias.autoridades || []);
+                setResponsables((dependencias.responsables || []).map((item: any) => ({
+                    ...item,
+                    nombre: `${item.nombre} ${item.apellido_paterno} ${item.apellido_materno}`
+                })));
+                setCapacitadores(dependencias.capacitadores || []);
+                
+                // Actualizar proyectos
+                setProyectos(responseProyectos.data);
+                // Configurar hasMore: si devolvió menos registros que perPage, no hay más
+                setHasMore(responseProyectos.data.length >= perPage);
+            } catch (error: any) {
+                showError(error.message || 'Ha ocurrido un error al cargar los datos');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCatalogos();
+    }, []);
+
+    const cleanRowsDeleting = (data:any) => {
+
+        setDeletingRows((prev:any) => {
+            const newRowsDeleting = { ...prev };
+            delete newRowsDeleting[data.uuid];
+            return newRowsDeleting;
+        });
+    }
+
+    const updateActividades = (data:any, isDelete:boolean=false) => {
+        setActividades((prev:any) => {
+            let updatedActividades = [...prev];
+            const index = updatedActividades.findIndex((actividad) => actividad.uuid === data.uuid);
+
+            if(isDelete) {
+                updatedActividades = updatedActividades.filter((_actividad:any, idx:any) => index !== idx)
+            } else {
+                if(index !== -1) {
+                    updatedActividades[index] = {
+                        ...data,
+                    }; 
+                } else {
+                    updatedActividades = [...updatedActividades, data];
+                }
+            }
+            
+            // Ordenar las actividades después de la actualización
+            const actividadesOrdenadas = ordenarActividades(updatedActividades);
+            
+            // Actualizar caché de actividades
+            if (proyectoActivo?.uuid) {
+                updateActividadesCache(proyectoActivo.uuid, actividadesOrdenadas);
+            }
+            // Si la actividad actualizada es la seleccionada, actualizar también el estado
+            if (actividadSeleccionada?.uuid === data.uuid) {
+                setActividadSeleccionada((prev:any) => ({ ...prev, ...data }));
+                setFormularioActividad((prev:any) => ({ ...prev, ...data }));
+            }
+            return actividadesOrdenadas;
+        });
+    }
+
+    const seleccionarActividad = async (actividad: any) => {
        
+        
+        if (actividad.uuid === actividadSeleccionada?.uuid) {
+            setActividadSeleccionada({});
+            setOpenPanelActividad(false);
+            setOpenPanelProyecto(true);
+            // Keep the detail panel visible
+        } else {
+            setOpenPanelActividad(true);
+            setOpenPanelProyecto(false);
+            setActividadSeleccionada({ ...actividad });
+            setShowDetailPanel(true); // Show the detail panel when an activity is selected
+            
+            // Cargar las tareas si no están en caché
+            const tareasEnCache = tareasPorProyecto[proyectoActivo.uuid]?.[actividad.uuid];
+            const tareasEnEstado = tareasPorActividad[actividad.uuid];
+            
+            if (!tareasEnCache && !tareasEnEstado) {
+                // No hay tareas en caché ni en estado, cargar desde el servidor
+                setLoadingTareasActividad((prev: any) => ({ ...prev, [actividad.uuid]: true }));
+                try {
+                    const tareas = await ProyectoService.getListaTareasPorActividadUuid(proyectoActivo.uuid, actividad.uuid);
+                    const nuevasTareas = tareas.data;
+                    
+                    setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: nuevasTareas }));
+                    updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+                } catch (error) {
+                    console.error('Error al cargar tareas:', error);
+                } finally {
+                    setLoadingTareasActividad((prev: any) => ({ ...prev, [actividad.uuid]: false }));
+                }
+            } else if (tareasEnCache && !tareasEnEstado) {
+                // Hay tareas en caché pero no en estado, cargar desde caché
+                setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: tareasEnCache }));
+            }
+        }
+    };
+
+    const onTogglePanelActividad = async (e:any, actividad:any) => {   
+        
+        setActividadCollapsed((prev: any) => ({
+                ...prev,
+                [actividad.uuid]: e.value
+        }));
+
+        if (!e.value) {
+            // Verificar si ya tenemos las tareas en caché
+            const tareasEnCache = tareasPorProyecto[proyectoActivo.uuid]?.[actividad.uuid];
+            
+            if (tareasEnCache) {
+                // Usar datos del caché
+                setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: tareasEnCache }));
+            } else {
+                // Cargar desde el servidor y guardar en caché
+                setLoadingTareasActividad((prev: any) => ({ ...prev, [actividad.uuid]: true }));
+                try {
+                    const tareas = await ProyectoService.getListaTareasPorActividadUuid(proyectoActivo.uuid, actividad.uuid);
+                    const nuevasTareas = tareas.data;
+                    
+                    setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: nuevasTareas }));
+                    updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+                } catch (error) {
+                    console.error('Error al cargar tareas:', error);
+                } finally {
+                    setLoadingTareasActividad((prev: any) => ({ ...prev, [actividad.uuid]: false }));
+                }
+            }
+        } else {
+            setTareasPorActividad((prev: any) => ({ ...prev, [actividad.uuid]: [] }));
+        }
+    }
+
+    const onChangeEstatusActividad = async (actividad:any, tarea:any) => {
+
+        let response;
+        
+        // Si la tarea está completada, marcarla como pendiente; si no, completarla
+        if (tarea.estatus === 'Completada') {
+            response = await ProyectoService.markAsPendingTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, tarea.id);
+        } else {
+            response = await ProyectoService.markAsCompleteTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, tarea.id);
+        }
+        
+        const updatedTarea = response.data;
+        
+        const nuevasTareas = (tareasPorActividad[actividad.uuid] || []).map((t: any) =>
+            t.id === tarea.id ? { ...updatedTarea, editing: false } : t
+        );
+        
+        setTareasPorActividad((prev: any) => ({
+            ...prev,
+            [actividad.uuid]: nuevasTareas
+        }));
+        
+        // Actualizar caché
+        updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+        
+        // Actualizar avance de la actividad en el caché
+        actualizarAvanceActividadEnCache(proyectoActivo.uuid, actividad.uuid);
+        
+        // Actualizar avance del proyecto en la lista
+        actualizarAvanceProyectoEnLista(proyectoActivo.uuid);
+    }
+
+    const onBlurTareaActividad = async (e:any, actividad:any, tarea:any) => {
+        
+        if (tarea.editing) {
+            const resUp = await ProyectoService.updateTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, tarea.id, { nombre: e.target.value });
+            const updatedTarea = resUp.data;
+            
+            const nuevasTareas = (tareasPorActividad[actividad.uuid] || []).map((t: any) =>
+                t.id === tarea.id ? { ...updatedTarea, editing: false } : t
+            );
+            
+            setTareasPorActividad((prev: any) => ({
+                ...prev,
+                [actividad.uuid]: nuevasTareas
+            }));
+            
+            // Actualizar caché
+            updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+        }
+    }
+
+    const onKeyDownTareaActividad =  async (e:any, actividad:any, tarea:any) => {
+
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (tarea.editing) {
+                const resUp = await ProyectoService.updateTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, tarea.id, { nombre: e.target.value });
+                const updatedTarea = resUp.data;
+                
+                const nuevasTareas = (tareasPorActividad[actividad.uuid] || []).map((t: any) =>
+                    t.id === tarea.id ? { ...updatedTarea, editing: false } : t
+                );
+                
+                setTareasPorActividad((prev: any) => ({
+                    ...prev,
+                    [actividad.uuid]: nuevasTareas
+                }));
+                
+                // Actualizar caché
+                updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+            }
+        }
+    }
+
+    const onChangeTareaActividad = async (e:any, actividad:any, tarea:any) => {   
+        setTareasPorActividad((prev: any) => ({
+            ...prev,
+            [actividad.uuid]: prev[actividad.uuid].map((t: any) =>
+                t.id === tarea.id ? { ...t,nombre:e.target.value, editing: true } : t
+            )
+        }));
+    }
+
+    const onDoubleClickTareaActividad = async (e:any, actividad:any, tarea:any) => {   
+        if(!accessEditTarea || !actividad.can_be_worked)
+            return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        setTareasPorActividad((prev: any) => ({
+            ...prev,
+            [actividad.uuid]: prev[actividad.uuid].map((t: any) =>
+                t.id === tarea.id ? { ...t, editing: true } : t
+            )
+        }));
+    }
+
+    const onDeleteTareaActividad = async (actividad:any, tarea:any) => { 
+
+        await ProyectoService.deleteTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, tarea.id);
+        
+        const nuevasTareas = (tareasPorActividad[actividad.uuid] || []).filter((t: any) => t.id !== tarea.id);
+        
+        setTareasPorActividad((prev: any) => ({
+            ...prev,
+            [actividad.uuid]: nuevasTareas
+        }));
+        
+        // Actualizar caché
+        updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+        
+        // Actualizar avance de la actividad en el caché
+        actualizarAvanceActividadEnCache(proyectoActivo.uuid, actividad.uuid);
+        
+        // Actualizar avance del proyecto en la lista
+        actualizarAvanceProyectoEnLista(proyectoActivo.uuid);
+    }
+
+    const onChangeNuevaTareaActividad = async (e:any, actividad:any) => {
+       
+        console.log(e.target.value);
+        setNuevaTareaActividad((prev) => ({
+            ...prev,
+            [actividad.uuid]: e.target.value
+        }));
+    }
+
+    const onAddNuevaTareaActividad = async (actividad: any) => {
+
+        const nombre = (nuevaTareaActividad[actividad.uuid] || '').trim();
+
+        if (!nombre) return;
+
+        const response = await ProyectoService.createTareaPorActividadUuid(proyectoActivo.uuid, actividad.uuid, { nombre });
+        const nuevaTarea = response.data;
+        
+        const nuevasTareas = [...(tareasPorActividad[actividad.uuid] || []), nuevaTarea];
+        
+        setTareasPorActividad((prev: any) => ({
+            ...prev,
+            [actividad.uuid]: nuevasTareas
+        }));
+        
+        setNuevaTareaActividad((prev) => ({
+            ...prev,
+            [actividad.uuid]: ''
+        }));
+        
+        // Actualizar caché
+        updateTareasCache(proyectoActivo.uuid, actividad.uuid, nuevasTareas);
+        
+        // Actualizar avance de la actividad en el caché
+        actualizarAvanceActividadEnCache(proyectoActivo.uuid, actividad.uuid);
+        
+        // Actualizar avance del proyecto en la lista
+        actualizarAvanceProyectoEnLista(proyectoActivo.uuid);
+    };
+
+    const onKeyDownNuevaTareaActividad = async (e: any, actividad: any) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await onAddNuevaTareaActividad(actividad);
+        }
+    };
+
+    const onClickNuevaTareaActividad = async (_e: any, actividad: any) => {
+        await onAddNuevaTareaActividad(actividad);
+    };
+
+    // Función para filtrar responsables por departamento del proyecto
+    const getResponsablesFiltrados = () => {
+        if (!proyectoActivo?.departamento_id) {
+            return responsables; // Si no hay proyecto activo, mostrar todos
+        }
+        
+        return responsables.filter((responsable: any) => 
+            responsable.tipo_dependencia === 'Departamento' && 
+            responsable.dependencia_id === proyectoActivo.departamento_id
+        );
+    };
+
+    // Funciones para manejo de filtros de proyectos
+    const handleFiltroChange = async (filtro: string, valor: any) => {
+        const nuevosFiltros = { ...filtros, [filtro]: valor };
+        setFiltros(nuevosFiltros);
+        handleResetControlsProyecto();
+        handleResetControlsActividad();
+        await cargarProyectosFiltrados(nuevosFiltros);
+    };
+
+    const limpiarFiltros = async () => {
+        const filtrosLimpios = {
+            tipoProyecto: null,
+            departamento: null,
+            estatus: null
+        };
+        setFiltros(filtrosLimpios);
+        // Recargar todos los proyectos sin filtros
+        setLoading(true);
+        //limpoar controles de proyecto y actividad
+        handleResetControlsProyecto();
+        handleResetControlsActividad();
+        try {
+            const response = await ProyectoService.paginateProyecto({
+                page: 1,
+                per_page: perPage
+            });
+            setProyectos(response.data);
+            setPage(1);
+            setHasMore(response.data.length >= perPage);
+        } catch (error: any) {
+            showError(error.message || 'Error al limpiar filtros');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const cargarProyectosFiltrados = async (filtrosAplicar: any = filtros) => {
+        setLoading(true);
+        try {
+            // Construir parámetros para la API
+            const params: any = {
+                page: 1,
+                per_page: perPage
+            };
+            
+            // Agregar filtros si están presentes
+            if (filtrosAplicar.tipoProyecto) {
+                params.tipo_proyecto_id = filtrosAplicar.tipoProyecto;
+            }
+            if (filtrosAplicar.departamento) {
+                params.departamento_id = filtrosAplicar.departamento;
+            }
+            if (filtrosAplicar.estatus) {
+                params.estatus = filtrosAplicar.estatus;
+            }
+            
+            // Llamar a la API con los filtros
+            const response = await ProyectoService.paginateProyecto(params);
+            setProyectos(response.data);
+            
+            // Reset de paginación cuando se aplican filtros
+            setPage(1);
+            // Determinar si hay más páginas: si devolvió menos registros que perPage, no hay más
+            setHasMore(response.data.length >= perPage);
+        } catch (error: any) {
+            showError(error.message || 'Error al cargar proyectos filtrados');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Funciones para manejo de documentos
+    const handleUploadDocumento = async (file: File, tipoDocumento: any) => {
+        try {
+            const formData = new FormData();
+            formData.append('archivo', file);
+            formData.append('tipo_documento_id', tipoDocumento.id);
+
+            // Aquí deberías implementar la llamada a tu API para subir el archivo
+            // const response = await DocumentoService.uploadDocument(formData);
+            const response  =  await ProyectoService.createDocumentoPorActividadUuid(actividadSeleccionada.proyecto_uuid, actividadSeleccionada.uuid, formData);
+
+            // Por ahora, simular la subida y actualizar el estado
+            const nuevoDocumento = {
+                id: Date.now(), // ID temporal
+                nombre_original: file.name,
+                size: file.size,
+                tipo_documento: tipoDocumento,
+                fecha_subida: new Date().toISOString(),
+                url: URL.createObjectURL(file) // URL temporal para preview
+            };
+
+            // Actualizar el estado de la actividad seleccionada con el nuevo documento
+            setActividadSeleccionada((prev: any) => ({
+                ...prev,
+                documentos: [...(prev.documentos || []), nuevoDocumento]
+            }));
+
+            showSuccess('Documento subido correctamente');
+        } catch (error) {
+            showError('Error al subir el documento');
+        }
+    };
+
+    const handleDeleteDocumento = async (documento: any) => {
+        try {
+            
+            await ProyectoService.deleteDocumentoPorActividadUuid(actividadSeleccionada.proyecto_uuid, actividadSeleccionada.uuid, documento.uuid);
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    const handleDownloadDocumento = (documento: any) => {
+        try {
+
+            //la api regresa un streamDownload
+            ProyectoService.downloadDocumentoPorActividadUuid(actividadSeleccionada.proyecto_uuid, actividadSeleccionada.uuid, documento.uuid)
+                .then((response) => {
+                    const url = window.URL.createObjectURL(new Blob([response]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', documento.nombre_original);
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                })
+                .catch((error) => {
+                   
+                    showError('Error al descargar el documento');
+                });
+        } catch (error) {
+            showError('Error al descargar el documento');
+        }
     };
 
     // Custom templates 
-
-     const renderHeader = () => {
+    const headerPanelActividad = (options: any, data: any) => {
+        const className = `${options.className} flex align-items-center gap-2`;
+        const actividadCompletada = isActividadCompletada(data.uuid, proyectoActivo?.uuid);
+        const avanceActividad = calcularAvanceActividad(data.uuid, proyectoActivo?.uuid);
+        const actividadVencida = isActividadVencida(data);
+        
+        // Contar tareas solo si están cargadas desde el cache/estado local
+        const tareasActuales = tareasPorActividad[data.uuid] || [];
+        const totalTareasLocales = tareasActuales.length;
+        const tareasCompletadasLocales = tareasActuales.filter((t: any) => t.estatus === 'Completada').length;
+        const hayTareasCargadas = totalTareasLocales > 0;
+        
+        // Obtener datos del servidor si no hay tareas cargadas localmente
+        const totalTareasServidor = data.total_tareas || 0;
+        const tareasCompletadasServidor = data.tareas_completadas || 0;
+        
+        // Determinar qué datos usar para mostrar
+        const totalTareas = hayTareasCargadas ? totalTareasLocales : totalTareasServidor;
+        const tareasCompletadas = hayTareasCargadas ? tareasCompletadasLocales : tareasCompletadasServidor;
+        
         return (
-            <div className="flex flex-column md:flex-row justify-content-between gap-1">
-                    <div className="flex flex-auto gap-2 ">
-                        <Button type="button" icon="pi pi-filter-slash" label="Limpiar" outlined onClick={clearFilter} />
-                    <span className="p-input-icon-left">
-                        <i className="pi pi-search" />
-                        <InputText value={globalFilterValue} onChange={onGlobalFilterChange} placeholder="Busqueda por palabras" />
+            <div className={className} style={{ flexWrap: 'nowrap', position: 'relative' }}>
+                {/* Etiqueta de vencimiento flotante */}
+                {actividadVencida && !actividadCompletada && (
+                    <div 
+                        className="absolute top-0 right-0 z-5"
+                        style={{ 
+                            transform: 'translate(8px, -8px)',
+                        }}
+                    >
+                        <Tag 
+                            value="VENCIDA" 
+                            severity="danger" 
+                            className="text-xs font-bold shadow-3"
+                            style={{
+                                fontSize: '10px',
+                                padding: '2px 6px',
+                                borderRadius: '4px'
+                            }}
+                        />
+                    </div>
+                )}
+                
+                {/* Contenedor del contenido principal - ocupa el espacio disponible */}
+                <div className="flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                    {actividadCompletada ? (
+                        <div className="flex align-items-center gap-1" title="Actividad completada">
+                            <i className="pi pi-check-circle text-green-600 flex-shrink-0"></i>
+                        </div>
+                    ) : (
+                        <div className="flex align-items-center gap-1" 
+                             title={`${tareasCompletadas}/${totalTareas} tareas completadas`}>
+                            <i className={`pi pi-clock ${actividadVencida ? 'text-red-500' : 'text-orange-500'} flex-shrink-0`}></i>
+                            <span className={`text-xs ${actividadVencida ? 'text-red-500' : 'text-orange-500'} font-semibold flex-shrink-0`}>
+                                {`${tareasCompletadas}/${totalTareas}`}
+                            </span>
+                        </div>
+                    )}
+                    <span className={`font-bold text-ellipsis overflow-hidden whitespace-nowrap flex-grow-1 ${actividadVencida && !actividadCompletada ? 'text-red-600' : ''}`}
+                          title={data.nombre}>
+                        {data.nombre}
+                        {/* Leyenda de solo lectura */}
+                        { !data.can_be_worked && (
+                            <div className="flex align-items-center gap-1 flex-shrink-0" 
+                                title="Actividad en modo solo lectura - No se pueden agregar, editar o eliminar tareas">
+                                <i className="pi pi-lock text-xs text-gray-500"></i>
+                                <span className="text-xs text-gray-500 font-medium">Sin acceso, solo lectura</span>
+                            </div>
+                        )}
                     </span>
+                    
+                    
+                    
+                    {!hayTareasCargadas && typeof data.porcentaje_avance === 'number' && (
+                        <i className="pi pi-database text-xs text-gray-400 flex-shrink-0" 
+                           title="Avance calculado por el servidor"></i>
+                    )}
+                    {hayTareasCargadas && (
+                        <i className="pi pi-refresh text-xs text-green-500 flex-shrink-0" 
+                           title="Avance en tiempo real"></i>
+                    )}
+                </div>
+                
+                {/* Contenedor de acciones - siempre permanece a la derecha */}
+                <div className="flex align-items-center gap-2 flex-shrink-0">
+                    <Button
+                        icon="pi pi-folder-open"
+                        rounded
+                        text
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setActividadSeleccionada(data);
+                            setVisibleRepositorioDocumentos(true);
+                        }}
+                        tooltip="Documentos"
+                        className="text-blue-600 hover:bg-blue-50"
+                    />
+                    <Button
+                        icon={ data.uuid === actividadSeleccionada?.uuid ? "pi pi-eye" : "pi pi-eye-slash" }
+                        rounded
+                        text
+                        size="small"
+                        onClick={() => seleccionarActividad(data) }
+                        tooltip='Ver detalles de actividad'
+                        className={ data.uuid === actividadSeleccionada?.uuid ? "text-green-600 hover:bg-green-50" : "text-surface-600" }
+                    />
+                    {options.togglerElement}
+                </div>
+            </div>
+        );
+    }
+
+    // Template para DataScroller de proyectos
+    const proyectoTemplate = (proyecto: any) => {
+        const avanceProyecto = calcularAvanceProyecto(proyecto.uuid);
+        const isActive = proyectoActivo.uuid === proyecto.uuid;
+        
+        return (
+            <div
+                key={proyecto.uuid}
+                onClick={() => onSelectProyecto(proyecto)}
+                className={`mx-3 mb-3 p-4 border-round-lg border-1 cursor-pointer transition-all duration-200 hover:shadow-lg ${
+                    isActive
+                        ? 'bg-primary-50 dark:bg-primary-900 border-primary-200 dark:border-primary-700 shadow-md' 
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+            >
+                <div className="flex align-items-start gap-3">
+                    <div className={`flex align-items-center justify-content-center w-3rem h-3rem border-round-md ${
+                        isActive ? 'bg-primary-100 dark:bg-primary-800' : 'bg-gray-100 dark:bg-gray-700'
+                    }`}>
+                        <i className={`pi pi-bookmark text-xl ${
+                            isActive ? 'text-primary-600' : 'text-gray-500'
+                        }`}></i>
                     </div>
-                    <div className="flex flex-grow-1 justify-content-start md:justify-content-end">
-                        <Button
-                            className="w-auto" 
-                            type="button" 
-                            icon="pi pi-plus" 
-                            label="Agregar" 
-                            onClick={onAgregar}/>
+                    
+                    <div className="flex-1 min-w-0">
+                        <div className="flex align-items-start justify-content-between mb-2">
+                            <h4 className={`text-lg font-semibold mb-1 line-height-3 ${
+                                isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-900 dark:text-white'
+                            }`}>
+                                {proyecto.nombre}
+                            </h4>
+                            <div className="flex align-items-center gap-1 ml-2">
+                                {isActive && (
+                                    <i className="pi pi-chevron-down text-primary-600 animation-duration-200"></i>
+                                )}
+                                {!isActive && (
+                                    <i className="pi pi-chevron-right text-gray-400"></i>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {proyecto.descripcion && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400 line-height-3 mb-3 overflow-hidden"
+                               style={{ 
+                                   display: '-webkit-box',
+                                   WebkitLineClamp: 2,
+                                   WebkitBoxOrient: 'vertical'
+                               }}>
+                                {proyecto.descripcion}
+                            </p>
+                        )}
+                        
+                        <div className="mb-2">
+                            <div className="flex align-items-center justify-content-between mb-1">
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Progreso
+                                </span>
+                                <div className="flex align-items-center gap-2">
+                                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                        {avanceProyecto}%
+                                    </span>
+                                    {proyecto.uuid !== proyectoActivo?.uuid && typeof proyecto.porcentaje_avance === 'number' && (
+                                        <i className="pi pi-database text-xs text-gray-400" title="Avance calculado por el servidor"></i>
+                                    )}
+                                    {proyecto.uuid === proyectoActivo?.uuid && (
+                                        <i className="pi pi-refresh text-xs text-green-500" title="Avance en tiempo real"></i>
+                                    )}
+                                </div>
+                            </div>
+                            <ProgressBar 
+                                value={avanceProyecto} 
+                                showValue={false}
+                                style={{ height: '8px' }}
+                                className={`border-round ${isActive ? 'opacity-100' : 'opacity-80'}`}
+                            />
+                        </div>
+                        
+                        <div className="flex align-items-center justify-content-between">
+                            <div className="flex align-items-center gap-2">
+                                {proyecto.tipo_proyecto_nombre && (
+                                    <Tag 
+                                        value={proyecto.tipo_proyecto_nombre} 
+                                        severity="info" 
+                                        className="text-xs px-2 py-1"
+                                    />
+                                )}
+                            </div>
+                            
+                            {isActive && (
+                                <div className="flex align-items-center gap-1 text-primary-600">
+                                    <i className="pi pi-eye text-sm"></i>
+                                    <span className="text-xs font-medium">Activo</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex align-items-center justify-content-between mt-2">
+                            {proyecto.departamento_nombre && (
+                                    <Tag 
+                                        value={proyecto.departamento_nombre} 
+                                        severity="warning" 
+                                        className="text-xs px-2 py-1"
+                                    />
+                                )}
+                        </div>
+                        
+                        {/* Mostrar monto solo para proyectos de inversión */}
+                        {proyecto.monto && proyecto.tipo_proyecto_nombre && 
+                         (proyecto.tipo_proyecto_nombre.toLowerCase().includes('inversión') || 
+                          proyecto.tipo_proyecto_nombre.toLowerCase().includes('inversion')) && (
+                            <div className="flex align-items-center gap-2 mt-2 p-2 bg-green-50 dark:bg-green-900 border-round">
+                                <i className="pi pi-dollar text-green-600"></i>
+                                <div className="flex flex-column">
+                                    <span className="text-xs text-green-800 dark:text-green-200 font-medium">
+                                        Monto de Inversión
+                                    </span>
+                                    <span className="text-sm font-bold text-green-900 dark:text-green-100">
+                                        {new Intl.NumberFormat('es-MX', {
+                                            style: 'currency',
+                                            currency: 'MXN'
+                                        }).format(proyecto.monto)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
+                </div>
             </div>
         );
     };
 
-    const actionsTemplate = (rowData:any, options:any, customHandlers:any) => (
-        <div className="flex align-items-center justify-content-center gap-2">
-            <Button
-                icon="pi pi-pencil" 
-                size='small'
-                onClick={() => customHandlers.onEdit({ data: rowData, index: options.rowIndex })} 
+    const renderToolbar = () => {
+        return (             
+            <FiltroProyectos
+                visible={showFilters}
+                onToggle={() => setShowFilters(!showFilters)}
+                filtros={filtros}
+                onFiltroChange={handleFiltroChange}
+                onLimpiarFiltros={limpiarFiltros}
+                accessAddProject={accessCreateProyecto}
+                onAddProject={onAgregar}
+                tiposProyecto={tiposProyecto}
+                departamentos={departamentos}
+                totalRegistros={proyectos.length}
             />
-            <Button
-                icon="pi pi-trash" 
-                size='small'
-                severity='danger'
-                loading={deletingRows[rowData.uuid]}
-                onClick={(event) => customHandlers.onDelete(event,{ data: rowData, index: options.rowIndex })} 
-            />
-            <Button
-                icon="pi pi-list"
-                size="small"
-                severity="info"
-                tooltip="Ver actividades"
-                onClick={() => router.push(`/proyectos/${rowData.uuid}/actividades`)}
-            />
-        </div>
-    );
 
-    const customHeader =(
-          <div className="flex align-items-center justify-content-between surface-border">
-            <h2 className="m-0 text-xl font-semibold">{ formularioProyecto.uuid ? 'Actualizar proyecto' : 'Registrar nuevo proyecto'}</h2>
-        </div>
-    )
+        );
+    };
 
-    const header = renderHeader();
+    // Breadcrumb items
+    const breadcrumbItems: MenuItem[] = [
+        { label: 'Gestión de proyectos', icon: 'pi pi-briefcase' },
+        { label: 'Proyectos', icon: 'pi pi-briefcase' }
+    ];
 
     return (
-        <div className="grid">
-            <div className="col-12">
-                <div className="card">
-                    <h5>Lista de proyectos</h5>
-                    <DataTable
-                        value={proyectos}
-                        paginator
-                        rows={10}
-                        dataKey="id"
-                        filters={filters}
-                        filterDisplay="menu"
-                        loading={loading}
-                        emptyMessage="No se encontraron registros."
-                        editMode='row'
-                        header={header}
-                    >
-                        <Column 
-                            field="tipo_proyecto_nombre" 
-                            header="Tipo proyecto" 
-                            filter 
-                            filterPlaceholder="Busqueda por departamento" 
-                            style={{ maxWidth: '4rem' }} />
-
-                        <Column 
-                            field="departamento_nombre" 
-                            header="Departamento" 
-                            filter 
-                            filterPlaceholder="Busqueda por tipo" 
-                            style={{ maxWidth: '4rem' }} /> 
-                        
-                        <Column 
-                            field="nombre" 
-                            header="Nombre" 
-                            filter 
-                            filterPlaceholder="Busqueda por nombre" 
-                            style={{ maxWidth: '4rem' }} />  
-
-                        <Column 
-                            field="descripcion" 
-                            header="Descripción" 
-                            style={{ maxWidth: '8rem' }}
-                            />                        
-                        <Column 
-                            body={(rowData, options) => actionsTemplate(rowData, options, {
-                                onEdit:onEditProyecto,
-                                onDelete:handleDelete
-                            })}
-                            bodyClassName="text-center" 
-                            style={{ maxWidth: '2rem' }} />
-                    </DataTable>
+        <PermissionGuard
+                    resource='gestion_proyectos.proyectos'
+                    action='acceso'
+                    fallback={<AccessDenied variant="detailed" message="No tienes acceso a esta modulo"/>}
+        >
+            <div className="grid">
+                <div className="col-12">
+                    <CustomBreadcrumb
+                        items={breadcrumbItems}
+                        theme="green"
+                        title="Gestión de Proyectos"
+                        description="Administra y supervisa todos los proyectos activos"
+                        icon="pi pi-briefcase"
+                    />
+                    {renderToolbar()}
                 </div>
-                <Sidebar 
-                    visible={visibleFormulario} 
-                    onHide={() => setVisibleFormulario(false)} 
-                    baseZIndex={1000} 
-                    position="right"
-                    modal={true}
-                    dismissable={false}
-                    className="w-full md:w-20rem lg:w-30rem"
-                    header={customHeader}
-                    >
-                    <div className="flex flex-column h-full">
-                        <div className='flex flex-column justify-content-beetwen gap-4'>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Tipo de proyecto <span className='text-red-600'>*</span></label>
-                                    <Dropdown 
-                                              name="tipoProyecto"
-                                              value={formularioProyecto.tipoProyecto}
-                                              onChange={handleFormularioChange}
-                                              options={tiposProyecto} 
-                                              optionLabel="nombre" 
-                                              optionValue='id'
-                                              placeholder="Seleccione una opción" 
-                                              className="w-full"/>
-                                    {formularioErrors.tipoProyecto && (
-                                        <small className='text-red-600'>{formularioErrors.tipoProyecto}</small>
-                                    )}
-                                </div>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Departamento <span className='text-red-600'>*</span></label>
-                                      <Dropdown 
-                                              name="departamento"
-                                              value={formularioProyecto.departamento}
-                                              onChange={handleFormularioChange}
-                                              options={departamentos} 
-                                              optionLabel="nombre" 
-                                              optionValue="id"
-                                              placeholder="Seleccione una opción" 
-                                              className="w-full"/>
-                                    {formularioErrors.departamento && (
-                                        <small className='text-red-600'>{formularioErrors.departamento}</small>
-                                    )}
-                                </div>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Nombre <span className='text-red-600'>*</span></label>
-                                    <InputText  
-                                        name="nombre"
-                                        value={formularioProyecto.nombre}
-                                        onChange={handleFormularioChange}></InputText>
-                                    {formularioErrors.nombre && (
-                                        <small className='text-red-600'>{formularioErrors.nombre}</small>
-                                    )}
-                                </div>
-                                <div className="flex flex-column gap-2">
-                                    <label htmlFor="" className='font-medium'>Descripción <span className='text-red-600'>*</span></label>
-                                    <InputTextarea 
-                                        name="descripcion"
-                                        value={formularioProyecto.descripcion}
-                                        onChange={handleFormularioChange} rows={10}></InputTextarea>
-                                    {formularioErrors.descripcion && (
-                                        <small className='text-red-600'>{formularioErrors.descripcion}</small>
-                                    )}
-                                </div>
-                        </div>
-                        <div className="mt-auto">
-                            <hr className="mb-3 mx-2 border-top-1 border-none surface-border" />
-                            <div className='flex justify-content-between align-items-center gap-2'>
-                                <Button label="Cancelar" 
-                                        icon="pi pi-times"
-                                        severity='danger'
-                                        disabled={loadingGuardar} 
-                                        onClick={() => setVisibleFormulario(false)}>
-                                </Button>
-                                <Button label="Guardar" 
-                                        icon="pi pi-save"
-                                        loading={loadingGuardar}
-                                        disabled={loadingGuardar} 
-                                        onClick={handleSaveData}></Button>
+                 
+                {proyectos.length === 0 && !loading ? (
+                    <EmptyStateProject onAddProject={onAgregar} />
+                ) : (
+                    <>
+                        {/* Panel de proyectos */}
+                        <div className="col-12 md:col-4">
+                            <div className="w-full bg-white border border-gray-200 border-round shadow-8 md:shadow-1 dark:bg-gray-800 dark:border-gray-700">
+                                <DataScroller
+                                    value={proyectos}
+                                    emptyMessage="No hay proyectos disponibles"
+                                    itemTemplate={proyectoTemplate}
+                                    rows={proyectos.length || perPage}
+                                    inline
+                                    pt={{
+                                        content: { className: 'border-none' },
+                                        item: { className: 'border-none' }
+                                    }}
+                                    scrollHeight="calc(85vh - 80px)"
+                                    header={
+                                        <div className="flex align-items-center justify-content-between p-3 bg-gray-50 dark:bg-gray-900 border-bottom-1 border-gray-200 dark:border-gray-700">
+                                            <div className="flex align-items-center gap-2">
+                                                <i className="pi pi-list text-primary-600"></i>
+                                                <span className="font-semibold text-primary-700 dark:text-primary-300">
+                                                    Proyectos ({proyectos.length})
+                                                </span>
+                                            </div>
+                                            {proyectos.length > 0 && (
+                                                <Tag 
+                                                    value={hasMore ? 'Más disponibles' : 'Todos cargados'} 
+                                                    severity={hasMore ? 'warning' : 'success'}
+                                                    className="text-xs"
+                                                />
+                                            )}
+                                        </div>
+                                    }
+                                    footer={
+                                        <div className="p-3 bg-gray-50 dark:bg-gray-900 border-top-1 border-gray-200 dark:border-gray-700">
+                                            {loading && (
+                                                <div className="flex align-items-center justify-content-center gap-2 py-2">
+                                                    <ProgressSpinner style={{width: '20px', height: '20px'}} strokeWidth="4" />
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Cargando proyectos...</span>
+                                                </div>
+                                            )}
+                                            {!loading && hasMore && proyectos.length > 0 && (
+                                                <Button 
+                                                    label={`Cargar más proyectos (${proyectos.length} de muchos)`}
+                                                    icon="pi pi-angle-down"
+                                                    outlined
+                                                    onClick={loadMoreProyectos}
+                                                    className="w-full"
+                                                />
+                                            )}
+                                            {!hasMore && proyectos.length > 0 && (
+                                                <div className="text-center py-2">
+                                                    <div className="flex align-items-center justify-content-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                                                        <i className="pi pi-check-circle text-green-500"></i>
+                                                        <span>Todos los proyectos han sido cargados ({proyectos.length} total)</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {!loading && proyectos.length === 0 && (
+                                                <div className="text-center py-6">
+                                                    <div className="mb-4">
+                                                        <i className="pi pi-folder-open text-6xl text-gray-300 dark:text-gray-600"></i>
+                                                    </div>
+                                                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                        No hay proyectos disponibles
+                                                    </h3>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                                        Comienza creando tu primer proyecto para organizar tus actividades
+                                                    </p>
+                                                    <Button 
+                                                        label="Crear primer proyecto" 
+                                                        icon="pi pi-plus"
+                                                        onClick={onAgregar}
+                                                        size="small"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    }
+                                    className="border-none"
+                                />
                             </div>
                         </div>
-                    </div>
-                </Sidebar>
+
+                        {/* Panel de actividades */}
+                        <div className={`col-12 ${(openPanelProyecto || openPanelActividad) && showDetailPanel ? 'md:col-4' : 'md:col-8'}`}>
+                            {(proyectoActivo.uuid && !loadingActividadesProyecto) && (
+                                <div className="w-full max-w-md bg-white border-round-lg shadow-md shadow-1 dark:bg-gray-800 dark:border-gray-700">
+                                    <div className="flex flex-column gap-3 p-3 border-bottom-1 surface-border">
+                                        <div className="flex align-items-center justify-content-between w-full">
+                                            <div className="flex align-items-center gap-2">
+                                                <i className="pi pi-list text-primary"></i>
+                                                <span className="m-0  text-primary-700 dark:text-primary-300 font-semibold">Actividades</span>
+                                            </div>
+                                            <div className="flex align-items-center gap-3">
+                                                <div className="flex align-items-center gap-2 px-3 py-1 border-round bg-primary-50 dark:bg-primary-900">
+                                                    <span className="text-sm text-primary-700 dark:text-primary-100">
+                                                        {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length}
+                                                    </span>
+                                                    <div className="text-md font-bold text-primary-800 dark:text-primary-200">
+                                                        {calcularAvanceProyecto()}%
+                                                    </div>
+                                                </div>
+                                                {(openPanelProyecto || openPanelActividad) && (
+                                                    <Button 
+                                                        tooltipOptions={{ position: 'left' }}
+                                                        tooltip={showDetailPanel ? "Ocultar panel de detalles" : "Mostrar panel de detalles"}
+                                                        icon={showDetailPanel ? "pi pi-angle-double-right" : "pi pi-angle-double-left"} 
+                                                        outlined 
+                                                        onClick={() => setShowDetailPanel(!showDetailPanel)}
+                                                        className="p-button-sm"
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="w-full">
+                                            <ProgressBar 
+                                                value={calcularAvanceProyecto()} 
+                                                showValue={false}
+                                                style={{ height: '6px' }}
+                                                className="w-full"
+                                            />
+                                        </div>
+                                        {accessCreateActividad && (
+                                            <Button 
+                                                icon="pi pi-plus" 
+                                                label='Agregar actividad' 
+                                                onClick={onAgregarActividad}
+                                                className="p-button-primary p-button-outlined align-self-start"/>
+                                        )}
+                                    </div>
+                                    <div className="overflow-y-auto" style={{ maxHeight: 'calc(95vh-180px)' }}>
+                                        {/* Estado vacío cuando no hay actividades pero si hay proyecto activo */}
+                                        {actividades.length === 0 && (
+                                            <div className="flex flex-column align-items-center justify-content-center gap-3 p-6">
+                                                <i className="pi pi-list text-6xl text-gray-300 dark:text-gray-600"></i>
+                                                <p className="text-gray-600 dark:text-gray-400 text-center">
+                                                    No hay actividades registradas para este proyecto.<br/>
+                                                    <span className="text-sm">Comienza agregando una nueva actividad.</span>
+                                                </p>
+                                            </div>
+                                        )}
+                                        
+                                        {actividades.map((actividad:any) => (
+                                            <Panel
+                                                toggleable={accessManageTareas && actividad.can_be_worked}
+                                                collapsed={actividadCollapsed[actividad.uuid] !== undefined ? actividadCollapsed[actividad.uuid] : true}
+                                                headerTemplate={(options) => headerPanelActividad(options, actividad)}
+                                                expandIcon="pi pi-chevron-down"
+                                                collapseIcon="pi pi-chevron-up"
+                                                key={actividad.uuid}
+                                                className='mx-2 my-2 shadow-1 border-round-lg'
+                                                pt={{
+                                                    header: { className: 'p-3' },
+                                                    content: { className: 'px-3 py-2' },
+                                                    root: { className: 'border-none' }
+                                                }}
+                                                onToggle={(e) => onTogglePanelActividad(e, actividad)} 
+                                            >
+                                                <div key={actividad.uuid}>
+                                                    <ul className='list-none p-0 m-0 flex flex-column gap-2'>
+                                                        {(tareasPorActividad[actividad.uuid] || []).map((tarea: any) => (
+                                                            <li key={tarea.id} className="flex align-items-center gap-2 p-2 border-round hover:surface-100 transition-colors transition-duration-150">
+                                                                {(accessCompleteTarea && actividad.can_be_worked) && (
+                                                                    <Checkbox   
+                                                                    checked={tarea.estatus === 'Completada'}
+                                                                    onChange={() => onChangeEstatusActividad(actividad, tarea)}
+                                                                    className="flex align-items-center justify-content-center"/>
+                                                                )}
+                                                                {tarea.editing ? (
+                                                                    <InputText
+                                                                        name={`nombre-${tarea.id}`}
+                                                                        id={`nombre-${tarea.id}`}
+                                                                        value={tarea.nombre}
+                                                                        autoFocus
+                                                                        onBlur={async (e) => onBlurTareaActividad(e, actividad, tarea)}
+                                                                        onKeyDown={async (e) => onKeyDownTareaActividad(e, actividad, tarea)}
+                                                                        onChange={(e) => onChangeTareaActividad(e, actividad, tarea)}
+                                                                        className="flex-1"
+                                                                    />
+                                                                ) : (
+                                                                    <span
+                                                                        className={`flex-1 cursor-pointer ${tarea.estatus === 'Completada' ? 'line-through text-gray-500' : ''}`}
+                                                                        onDoubleClick={(e) => onDoubleClickTareaActividad(e, actividad, tarea)}
+                                                                    >
+                                                                        {tarea.nombre}
+                                                                    </span>
+                                                                )}
+                                                                {(accessDeleteTarea && actividad.can_be_worked) && (
+                                                                    <Button
+                                                                        icon="pi pi-times"
+                                                                        severity="danger"
+                                                                        tooltip='Eliminar tarea'
+                                                                        rounded
+                                                                        text
+                                                                        size="small"
+                                                                        onClick={() => onDeleteTareaActividad(actividad, tarea)}/>
+                                                                )}
+                                                            </li>
+                                                        ))}
+                                                        {(loadingTareasActividad[actividad.uuid] === false && (accessCreateTarea || actividad.can_be_worked)) && (
+                                                            <li className="flex items-center gap-2 p-2">
+                                                                    <InputText
+                                                                        placeholder="Nueva tarea..."
+                                                                        name={`nuevaTareaNombre-${actividad.uuid}`}
+                                                                        id={`nuevaTareaNombre-${actividad.uuid}`}
+                                                                        value={nuevaTareaActividad[actividad.uuid] || ''}
+                                                                        onChange={(e) => onChangeNuevaTareaActividad(e, actividad)}
+                                                                        onKeyDown={(e) => onKeyDownNuevaTareaActividad(e, actividad)}
+                                                                        autoFocus
+                                                                        className="flex-1"
+                                                                    />
+                                                                    
+                                                                    <Button
+                                                                        icon="pi pi-plus"
+                                                                        severity="success"
+                                                                        rounded
+                                                                        text
+                                                                        size="small"
+                                                                        onClick={(e) => onClickNuevaTareaActividad(e, actividad)}/>
+                                                            </li>
+                                                        )}
+                                                    </ul>
+                                                </div>
+                                            </Panel> 
+                                        ))}
+                                    </div>
+                                </div>
+                            )} 
+                            {/* Estado vacío cuando no hay proyecto activo */}
+                            {(!proyectoActivo.uuid && !loadingActividadesProyecto) && (
+                                <EmptyStateActivity />
+                            )}
+                            {loadingActividadesProyecto && (
+                                <div className="loading-overlay h-full flex justify-content-center align-items-center">
+                                    <ProgressSpinner />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Panel de detalles de proyecto o actividad */}
+                        {(openPanelProyecto || openPanelActividad) && showDetailPanel && (
+                            <div className='col-12 md:col-4'>
+                                { (actividadSeleccionada.uuid && openPanelActividad) && (
+                                    <div className="w-full max-w-md bg-white border-round-lg shadow-md shadow-1 dark:bg-gray-800">
+                                        <div className="p-3 border-bottom-1 surface-border">
+                                            <div className="flex align-items-center justify-content-between">
+                                                <span className="font-bold m-0 text-primary-700 dark:text-primary-300">{actividadSeleccionada.nombre}</span>
+                                                <div className="flex align-items-center gap-2">
+                                                    
+                                                    <Tag value={actividadSeleccionada.prioridad} 
+                                                        severity={
+                                                            actividadSeleccionada.prioridad === 'Alta' 
+                                                            ? 'danger' 
+                                                            : actividadSeleccionada.prioridad === 'Media' 
+                                                            ? 'warning' 
+                                                            : 'info'
+                                                        } 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-4">
+                                            {/* People Section */}
+                                            <div className="mb-3">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Participantes</h3>
+                                                <div className="grid">
+                                                    <div className="col-12 mb-2">
+                                                        <div className="flex align-items-center gap-2">
+                                                            <Avatar label="R" shape="circle" size="normal" className="bg-primary-100 text-primary-700"/>
+                                                            <div className="flex flex-column">
+                                                                <span className="text-sm text-gray-600 dark:text-gray-400">Responsable</span>
+                                                                <span className="font-medium">{actividadSeleccionada.responsable_nombre}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-12 mb-2">
+                                                        <div className="flex align-items-center gap-2">
+                                                            <Avatar label="C" shape="circle" size="normal" className="bg-orange-100 text-orange-700"/>
+                                                            <div className="flex flex-column">
+                                                                <span className="text-sm text-gray-600 dark:text-gray-400">Capacitador</span>
+                                                                <span className="font-medium">{actividadSeleccionada.capacitador_nombre}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-12">
+                                                        <div className="flex align-items-center gap-2">
+                                                            <Avatar label="B" shape="circle" size="normal" className="bg-green-100 text-green-700"/>
+                                                            <div className="flex flex-column">
+                                                                <span className="text-sm text-gray-600 dark:text-gray-400">Beneficiario</span>
+                                                                <span className="font-medium">{actividadSeleccionada.beneficiario_nombre}</span>
+                                                            </div>
+                                                        </div>
+                                                        {(actividadSeleccionada.persona_beneficiada && Array.isArray(actividadSeleccionada.persona_beneficiada)) && 
+                                                            (
+                                                                <div className="flex flex-column gap-2 py-1 ml-2">
+                                                                    <span className="text-sm text-gray-600 dark:text-gray-400 mt-2">Número de beneficiarios por tipo</span>
+                                                                    <div className="flex flex-auto flex-wrap gap-2 ">
+                                                                        {actividadSeleccionada.persona_beneficiada.map((persona:any, index: number) => (
+                                                                        <div className="flex align-items-center gap-2" key={`${actividadSeleccionada.uuid}-persona-${index}`}>
+                                                                            <span className="font-medium text-gray-600 dark:text-gray-400">{persona.nombre === 'Mujer' ? `Mujer(es)` : `${persona.nombre}(s)` }</span>
+                                                                            <Badge  value={persona.total} severity="info"></Badge>
+                                                                        </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            
+                                                            )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Details Section */}
+                                            <div className="mb-3">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles</h3>
+                                                <div className="grid">
+                                                    <div className="col-12 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tipo de actividad</span>
+                                                        <span className="font-medium">{actividadSeleccionada.tipo_actividad_nombre}</span>
+                                                    </div>
+                                                    <div className="col-12 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prioridad</span>
+                                                        <span className="font-medium">{actividadSeleccionada.prioridad}</span>
+                                                    </div>
+                                                    <div className="col-12 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Registro NAFIN</span>
+                                                        <span className="font-medium">{actividadSeleccionada.registro_nafin || 'No disponible'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Dates Section */}
+                                            <div className="mb-3">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Fechas</h3>
+                                                <div className="grid">
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                            <i className="pi pi-calendar text-primary mr-2"></i>Inicio
+                                                        </span>
+                                                        <span className="font-medium">
+                                                            {actividadSeleccionada.fecha_inicio ? new Date(actividadSeleccionada.fecha_inicio).toLocaleDateString('es-ES', {
+                                                                day: '2-digit',
+                                                                month: 'short',
+                                                                year: 'numeric',
+                                                            }).replace('.', '') : 'No disponible'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                            <i className="pi pi-flag text-danger mr-2"></i>Fin
+                                                        </span>
+                                                        <span className="font-medium">
+                                                            {actividadSeleccionada.fecha_fin ? new Date(actividadSeleccionada.fecha_fin).toLocaleDateString('es-ES', {
+                                                                day: '2-digit',
+                                                                month: 'short',
+                                                                year: 'numeric',
+                                                            }).replace('.', '') : 'No disponible'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha solicitud constancia</span>
+                                                        <span className="font-medium">{actividadSeleccionada.fecha_solicitud_constancia ? new Date(actividadSeleccionada.fecha_solicitud_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío constancia</span>
+                                                        <span className="font-medium">{actividadSeleccionada.fecha_envio_constancia ? new Date(actividadSeleccionada.fecha_envio_constancia).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha vencimiento envío encuesta</span>
+                                                        <span className="font-medium">{actividadSeleccionada.fecha_vencimiento_envio_encuesta ? new Date(actividadSeleccionada.fecha_vencimiento_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha envío encuesta</span>
+                                                        <span className="font-medium">{actividadSeleccionada.fecha_envio_encuesta ? new Date(actividadSeleccionada.fecha_envio_encuesta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha inicio difusión banner</span>
+                                                        <span className="font-medium">{actividadSeleccionada.fecha_inicio_difusion_banner ? new Date(actividadSeleccionada.fecha_inicio_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                                    </div>
+                                                    <div className="col-6 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Fecha fin difusión banner</span>
+                                                        <span className="font-medium">{actividadSeleccionada.fecha_fin_difusion_banner ? new Date(actividadSeleccionada.fecha_fin_difusion_banner).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : 'No disponible'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Links Section */}
+                                            <div className="mb-3">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Enlaces</h3>
+                                                <div className="flex flex-wrap gap-2 justify-content-center sm:justify-content-between">
+                                                    <Button
+                                                        size='small'
+                                                        label="Zoom"
+                                                        icon="pi pi-video"
+                                                        disabled={!actividadSeleccionada.link_zoom}
+                                                        onClick={() => window.open(actividadSeleccionada.link_zoom, '_blank', 'noopener,noreferrer')}
+                                                        className="p-button-outlined p-button-rounded flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                    />
+                                                    <Button
+                                                        size='small'
+                                                        label="Registro"
+                                                        icon="pi pi-user-plus"
+                                                        disabled={!actividadSeleccionada.link_registro}
+                                                        onClick={() => window.open(actividadSeleccionada.link_registro, '_blank', 'noopener,noreferrer')}
+                                                        className="p-button-outlined p-button-rounded flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                    />
+                                                    <Button
+                                                        size='small'
+                                                        label="Panelista"
+                                                        icon="pi pi-users"
+                                                        disabled={!actividadSeleccionada.link_panelista}
+                                                        onClick={() => window.open(actividadSeleccionada.link_panelista, '_blank', 'noopener,noreferrer')}
+                                                        className="p-button-outlined p-button-rounded flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Actions Section Actividad */}
+                                            <div className="border-top-1 surface-border pt-4">
+                                                <div className="flex flex-wrap gap-2 justify-content-center sm:justify-content-between">
+                                                    {(accessDeleteActividad && actividadSeleccionada.can_be_worked) && (
+                                                        <Button
+                                                            size='small'
+                                                            icon="pi pi-trash"
+                                                            severity="danger"
+                                                            label="Eliminar"
+                                                            className="p-button-outlined flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                            style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                            onClick={(event) => onDeleteActividad(event, { itemData: actividadSeleccionada })}/>
+                                                    )}
+                                                    {(accessEditActividad && actividadSeleccionada.can_be_worked) && (
+                                                        <Button
+                                                            size='small'
+                                                            icon="pi pi-pencil"
+                                                            severity="warning"
+                                                            label="Editar"
+                                                            className="p-button-outlined flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                            style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                            onClick={() => onEditActividad({ item: { itemData: actividadSeleccionada }})}
+                                                        />
+                                                    )}
+                                                    <Button
+                                                        size='small'
+                                                        icon="pi pi-file-pdf"
+                                                        outlined
+                                                        label='Exportar'
+                                                        onClick={exportarActividadAPDF}
+                                                        tooltip="Exportar detalles de la actividad a PDF"
+                                                        className="text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none min-w-0 sm:min-w-min"
+                                                        style={{ flexBasis: 'calc(33.333% - 0.5rem)' }}
+                                                        tooltipOptions={{ position: 'bottom' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {(proyectoActivo.uuid && openPanelProyecto && !openPanelActividad && !loadingActividadesProyecto) && (
+                                    <div className="w-full max-w-md bg-white border-round-lg shadow-md shadow-1 dark:bg-gray-800">
+                                        <div className="p-3 border-bottom-1 surface-border">
+                                            <div className="flex align-items-center justify-content-between mb-1">
+                                                <span className="font-bold m-0 text-primary-700 dark:text-primary-300">{proyectoActivo.nombre}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-4">
+                                            {/* Project Progress Section */}
+                                            <div className="mb-4">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Progreso del Proyecto</h3>
+                                                <div className="flex align-items-center justify-content-between mb-2">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-300">
+                                                        {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}/{actividades.length} actividades completadas
+                                                    </span>
+                                                    <span className="text-lg font-bold text-primary-600">
+                                                        {calcularAvanceProyecto()}%
+                                                    </span>
+                                                </div>
+                                                <ProgressBar 
+                                                    value={calcularAvanceProyecto()} 
+                                                    showValue={false}
+                                                    style={{ height: '8px' }}
+                                                />
+                                            </div>
+
+                                            {/* Project Details Section */}
+                                            <div className="mb-4">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Detalles del Proyecto</h3>
+                                                <div className="grid">
+                                                    <div className="col-12 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                            <i className="pi pi-tag text-primary-600 mr-2"></i>Tipo de proyecto
+                                                        </span>
+                                                        <span className="font-medium">{ proyectoActivo.tipo_proyecto_nombre }</span>
+                                                    </div>
+                                                    <div className="col-12 mb-3">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                            <i className="pi pi-building text-orange-500 mr-2"></i>Departamento
+                                                        </span>
+                                                        <span className="font-medium">{ proyectoActivo.departamento_nombre }</span>
+                                                    </div>
+                                                    <div className="col-12">
+                                                        <span className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                                            <i className="pi pi-file-edit text-green-500 mr-2"></i>Descripción
+                                                        </span>
+                                                        <p className="font-medium m-0">{ proyectoActivo.descripcion }</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Activity Summary Section */}
+                                            <div className="mb-4">
+                                                <h3 className="text-sm uppercase text-gray-600 dark:text-gray-400 mb-3">Resumen de Actividades</h3>
+                                                <div className="grid">
+                                                    <div className="col-6">
+                                                        <div className="p-3 border-round bg-primary-50 dark:bg-primary-900">
+                                                            <div className="text-sm text-primary-600 mb-1">Total</div>
+                                                            <div className="text-xl font-bold text-primary-700">{actividades.length}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-6">
+                                                        <div className="p-3 border-round bg-green-50 dark:bg-green-900">
+                                                            <div className="text-sm text-green-600 mb-1">Completadas</div>
+                                                            <div className="text-xl font-bold text-green-700">
+                                                                {actividades.filter((act: any) => isActividadCompletada(act.uuid, proyectoActivo?.uuid)).length}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions Section */}
+                                            <div className="border-top-1 surface-border pt-4">
+                                                <div className="flex flex-column sm:flex-row gap-2 justify-content-center sm:justify-content-between">
+                                                   {accessDeleteProyecto && (
+                                                        <Button
+                                                            icon="pi pi-trash"
+                                                            severity="danger"
+                                                            label="Eliminar"
+                                                            className="p-button-outlined w-full sm:w-auto"
+                                                            loading={deletingRows[proyectoActivo.uuid] || false}
+                                                            onClick={(event) => handleDelete(event, { data: proyectoActivo })}/>
+                                                    )}
+                                                    {accessEditProyecto && (
+                                                        <Button
+                                                            icon="pi pi-pencil"
+                                                            severity="warning"
+                                                            label="Editar"
+                                                            className="p-button-outlined w-full sm:w-auto"
+                                                            onClick={() => onEditProyecto({ data: proyectoActivo })}/>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>  
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+                    <FormularioProyecto 
+                            visible={visibleFormulario}
+                            onHide={() => setVisibleFormulario(false)}
+                            initialData={formularioProyecto}
+                            onSave={handleSaveData}
+                            loading={loadingGuardar}
+                            errors={formularioErrors}
+                            setFieldValue={(field, value) => {
+                                handleFormularioChange({
+                                    target: {
+                                        name: field,
+                                        value: value
+                                    }
+                                });
+                            }}
+                            tiposProyecto={tiposProyecto}
+                            departamentos={departamentos}/>
+                    <FormularioActividad 
+                            visible={visibleFormularioActividad} 
+                            onHide={() => setVisibleFormularioActividad(false)} 
+                            initialData={formularioActividad} 
+                            onSave={handleSaveDataActividad} 
+                            loading={loadingGuardarActividad} 
+                            errors={formularioActividadErrors}
+                            setFieldValue={(field, value) => {
+                                setFormularioActividad((prev:any) => ({
+                                    ...prev,
+                                    [field]: value
+                                }));
+                            }}
+                            tiposActividad={tiposActividad}
+                            beneficiarios={beneficiarios}
+                            autoridades={autoridades}
+                            responsables={getResponsablesFiltrados()}
+                            capacitadores={capacitadores}
+                            tiposBeneficiados={tiposBeneficiados}
+                            prioridades={prioridades}/>
+                    <RepositorioDocumentos
+                            visible={visibleRepositorioDocumentos}
+                            onHide={() => setVisibleRepositorioDocumentos(false)}
+                            actividad={actividadSeleccionada}
+                            tiposDocumento={tiposDocumento}
+                            onUploadDocument={handleUploadDocumento}
+                            onDeleteDocument={handleDeleteDocumento}
+                            onDownloadDocument={handleDownloadDocumento}/>
             </div>
-        </div>
+        </PermissionGuard>
     );
 };
 
