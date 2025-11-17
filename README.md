@@ -198,9 +198,10 @@ pm2 save
     </VirtualHost>
     ```
 
-    5. Habilitar HTTPS (certificados) y ajustar cabeceras de seguridad
+5. Habilitar HTTPS (certificados) y ajustar cabeceras de seguridad
 
     5.1 Nginx (HTTPS)
+
     Let's Encrypt / certbot y cabeceras de seguridad
 
     Para levantar certificados y configurar HTTPS de forma automática en Nginx con certbot (Ubuntu/Debian):
@@ -208,6 +209,9 @@ pm2 save
     ```bash
     sudo apt update
     sudo apt install certbot python3-certbot-nginx
+    ```
+
+    ```bash
     # Ejecutar certbot para crear y configurar el certificado
     sudo certbot --nginx -d app.example.com
     ```
@@ -283,22 +287,22 @@ pm2 save
 
     Si usas Let's Encrypt, usa `certbot --apache` para configurar SSL automáticamente.
 
-        1. Instalar certbot plugin para Apache:
+    1. Instalar certbot plugin para Apache:
 
-        ```bash
-        sudo apt update
-        sudo apt install certbot python3-certbot-apache
-        ```
+    ```bash
+    sudo apt update
+    sudo apt install certbot python3-certbot-apache
+    ```
 
-        2. Solicitar y aplicar certificado con Apache plugin:
+    2. Solicitar y aplicar certificado con Apache plugin:
 
-        ```bash
-        sudo certbot --apache -d app.example.com
-        ```
+    ```bash
+    sudo certbot --apache -d app.example.com
+    ```
 
-        3. Si no quieres modificar automáticamente la configuración de Apache, usa `certbot certonly --apache` y luego añade los `SSLCertificateFile` y `SSLCertificateKeyFile` en tu VirtualHost.
+    3. Si no quieres modificar automáticamente la configuración de Apache, usa `certbot certonly --apache` y luego añade los `SSLCertificateFile` y `SSLCertificateKeyFile` en tu VirtualHost.
 
-        4. Renovación: `sudo certbot renew --dry-run` para pruebas o `sudo certbot renew` en producción (certbot instala hooks cron/`systemd` timer).
+    4. Renovación: `sudo certbot renew --dry-run` para pruebas o `sudo certbot renew` en producción (certbot instala hooks cron/`systemd` timer).
 
 ### 5) API / Backend
 
