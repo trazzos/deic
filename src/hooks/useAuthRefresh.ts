@@ -60,7 +60,6 @@ export const useAuthRefresh = (options: UseAuthRefreshOptions = {}) => {
             setIsRefreshing(true);
             await checkAuth();
         } catch (error) {
-            console.warn('Error al refrescar permisos:', error);
         } finally {
             setIsRefreshing(false);
         }

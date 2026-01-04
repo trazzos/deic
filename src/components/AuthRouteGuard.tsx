@@ -32,7 +32,6 @@ export const AuthRouteGuard: React.FC<AuthRouteGuardProps> = ({ children }) => {
 
         // Si el usuario está autenticado y está en una ruta de auth, redirigir al dashboard
         if (isAuthenticated && isAuthRoute) {
-            console.log('✅ Usuario ya autenticado, redirigiendo al dashboard...');
             router.replace('/');
             return;
         }

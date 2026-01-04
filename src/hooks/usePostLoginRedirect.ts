@@ -15,20 +15,12 @@ export const usePostLoginRedirect = () => {
             return;
         }
 
-        // Obtener la ruta guardada antes del login
         const redirectPath = sessionStorage.getItem('redirectAfterLogin');
-        
         if (redirectPath) {
-            // Limpiar la ruta guardada
             sessionStorage.removeItem('redirectAfterLogin');
-            
-            // Redirigir a la página original
-            console.log('🔄 Redirigiendo a:', redirectPath);
-            router.replace(redirectPath);
+            window.location.href = redirectPath;
         } else {
-            // Si no hay ruta guardada, ir al dashboard
-            console.log('🏠 Redirigiendo al dashboard');
-            router.replace('/');
+            window.location.href = '/';
         }
     }, [isAuthenticated, user, initialized, router]);
 };

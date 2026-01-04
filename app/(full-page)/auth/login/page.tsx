@@ -6,6 +6,7 @@ import { Button } from 'primereact/button';
 import { Password } from 'primereact/password';
 import { LayoutContext } from '../../../../layout/context/layoutcontext';
 import { useAuth } from '@/layout/context/authContext';
+import { usePostLoginRedirect } from '@/src/hooks/usePostLoginRedirect';
 import { useNotification } from '@/layout/context/notificationContext';
 import { InputText } from 'primereact/inputtext';
 import { classNames } from 'primereact/utils';
@@ -15,12 +16,15 @@ const LoginPage = () => {
     const [email, setEmail] = useState('');
     const { layoutConfig } = useContext(LayoutContext);
     const { login, loading, isAuthenticated } = useAuth();
-    const { showSuccess, showError } = useNotification();
+    const { showError } = useNotification();
     const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
 
     const router = useRouter();
     const containerClassName = classNames('surface-ground flex align-items-center justify-content-center min-h-screen min-w-screen overflow-hidden', { 'p-input-filled': layoutConfig.inputStyle === 'filled' });
+
+    // Usar el hook para redirección post-login
+    usePostLoginRedirect();
 
     const validate = () => {
         const newErrors: { email?: string; password?: string } = {};
@@ -42,19 +46,13 @@ const LoginPage = () => {
         if (!validate()) return;
         try {
             await login(email, password);
-            router.push('/');
+            // La redirección se maneja automáticamente por usePostLoginRedirect
             
         } catch (error) {
         
             showError('¡Error!', 'No se pudo iniciar sesión. Por favor, verifica tus credenciales e intenta nuevamente.');
         }
     };
-
-    useEffect(() => {
-        if (!loading && isAuthenticated) {
-            router.replace('/');
-        }
-    }, [loading, isAuthenticated, router]);
 
     return (
         <div className={containerClassName}>

@@ -1,11 +1,26 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, use } from 'react';
 import http from '@/src/lib/axios';
 import { 
-    storePermissionsSecurely, 
-    getStoredPermissionsSecurely, 
+    storeSessionData, 
+    getStoredSessionData, 
     clearSessionData, 
     isSuperAdminRole 
 } from '@/src/utils/securityUtils';
+
+// Variable global para token en memoria (accesible desde axios)
+let cachedToken: string | null = null;
+
+export const setCachedToken = (token: string | null): void => {
+    cachedToken = token;
+};
+
+export const clearCachedToken = (): void => {
+        cachedToken = null;
+};
+
+export const getCachedToken = (): string | null  => {
+    return cachedToken;
+};
 
 export interface AuthContextProps {
     user: any;
@@ -17,6 +32,7 @@ export interface AuthContextProps {
     checkAuth: () => Promise<void>;
     permissions: string[];
     userRoles: string[];
+    token: string | null;
     isSuperAdmin: boolean;
     hasPermission: (permission: string) => boolean;
     hasAnyPermission: (permissions: string[]) => boolean;
@@ -31,22 +47,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [userRoles, setUserRoles] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [initialized, setInitialized] = useState(false);
+    const hasInitialized = useRef(false);
     
     // Verificar si el usuario es superadmin
     const isSuperAdmin = useMemo(() => isSuperAdminRole(userRoles), [userRoles]);
-    const isAuthenticated = useMemo(() => !!user, [user]);
+    // Checar si está autenticado evaluando si hay un token válido
+    const isAuthenticated = useMemo(() => !!getCachedToken(), [getCachedToken()]);
 
     // Función para limpiar todo el estado
     const clearAllState = () => {
         setUser(null);
         setPermissions([]);
         setUserRoles([]);
+        clearCachedToken();
         clearSessionData();
     };
 
     // Función para establecer datos de usuario con validación
-    const setUserData = (userData: any, userPermissions: string[] = [], userRolesList: string[] = []) => {
-        if (!userData) {
+    const setUserData = (userData: any, userPermissions: string[] = [], userRolesList: string[] = [], token: string) => {
+        if (!userData || !token) {
             clearAllState();
             return;
         }
@@ -54,11 +73,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(userData);
         setPermissions(userPermissions);
         setUserRoles(userRolesList);
+        setCachedToken(token);
         
-        // Solo almacenar si tenemos datos válidos
-        if (userPermissions.length > 0 || userRolesList.length > 0) {
-            storePermissionsSecurely(userPermissions, userRolesList);
-        }
+        // Almacenar solo si tenemos token válido
+        storeSessionData(userPermissions, userRolesList, token, userData);
     };
 
     // Función para verificar autenticación
@@ -83,8 +101,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 typeof role === 'string' ? role : role.name || role.role_name || role.nombre
             ).filter(Boolean);
 
-            // Establecer datos de usuario
-            setUserData(userData, userPermissions, roleNames);
+            // Establecer datos de usuario solo si hay token
+            const currentToken = getCachedToken();
+            if (currentToken) {
+                setUserData(userData, userPermissions, roleNames, currentToken);
+            }
 
         } catch (error: any) {      
             // Si es 401/403, limpiar todo y el SessionGuard se encargará de redirigir
@@ -92,7 +113,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 clearAllState();
             } else {
                 // Para otros errores, mantener datos de localStorage si existen
-                const storedData = getStoredPermissionsSecurely();
+                const storedData = getStoredSessionData();
                 if (!storedData || !storedData.permissions || !storedData.roles) {
                     clearAllState();
                 }
@@ -101,17 +122,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     useEffect(() => {
+        if (hasInitialized.current) return; // Evitar doble ejecución en Strict Mode
+        
         const initializeAuth = async () => {
+            hasInitialized.current = true; // Marcar como inicializado
             setLoading(true);
         
             try {
-                const storedData = getStoredPermissionsSecurely();
-                
+                const storedData = getStoredSessionData();
                 if (storedData && storedData.permissions && storedData.roles) {
                     setPermissions(storedData.permissions);
                     setUserRoles(storedData.roles);
+                    setCachedToken(storedData.token || null);
+                    if (storedData.user) {
+                        setUser(storedData.user);
+                    }
                 }
-                await checkAuth();
+                
+                // Llamar checkAuth en background si hay token para verificar validez
+                if (storedData?.token) {
+                    checkAuth().catch((error) => {
+                        clearAllState();
+                    });
+                }
 
             } catch (error) {
                 clearAllState();
@@ -121,8 +154,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
         };
 
-        if (!initialized) {
-            initializeAuth();
+        initializeAuth();
+    }, []);
+
+
+    useEffect(() => {
+        // Debug en desarrollo
+        if (process.env.NODE_ENV === 'development' && initialized) {
+            console.log('🔐 Estado de autenticación actualizado:', {
+                isAuthenticated,
+                user: user?.email || 'No autenticado',
+                isSuperAdmin,
+                permissions: permissions.length,
+                roles: userRoles
+            });
         }
     }, [initialized]);
 
@@ -130,8 +175,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const login = async (email: string, password: string): Promise<void> => {
         setLoading(true);
         try {
-    
-            await http.get(`/sanctum/csrf-cookie`);
             const res: any = await http.post(`/api/auth/login`, {
                 email,
                 password
@@ -141,7 +184,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 throw new Error('Respuesta de login inválida');
             }
 
-            // Extraer permisos y roles del usuario
+            // Extraer token, permisos y roles del usuario
+            const token = res.token;
             const userPermissions = res.user?.permisos || res.permissions || [];
             const userRolesData = res.user?.roles || res.roles || [];
 
@@ -151,7 +195,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             ).filter(Boolean);
 
             // Establecer datos de usuario
-            setUserData(res.user, userPermissions, roleNames);
+            setUserData(res.user, userPermissions, roleNames, token);
             
         } catch (error) {
             clearAllState();
@@ -206,21 +250,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return hasAccess;
     };
 
-    // Debug en desarrollo
-    useEffect(() => {
-        if (process.env.NODE_ENV === 'development') {
-            console.log('🔐 Estado de autenticación:', {
-                isAuthenticated,
-                user: user?.email || 'No autenticado',
-                isSuperAdmin,
-                permissions: permissions.length,
-                roles: userRoles,
-                loading,
-                initialized
-            });
-        }
-    }, [isAuthenticated, user, isSuperAdmin, permissions, userRoles, loading, initialized]);
-
     return (
         <AuthContext.Provider value={{ 
             user, 
@@ -232,6 +261,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             checkAuth,
             permissions,
             userRoles,
+            token: getCachedToken(),
             isSuperAdmin,
             hasPermission,
             hasAnyPermission,

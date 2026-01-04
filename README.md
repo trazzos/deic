@@ -86,7 +86,14 @@ Si prefieres desplegar en otra carpeta (ej. `/home/deploy/` o `/opt/`), asegúra
 - Frontend: Next.js + React — sirve la interfaz y usa App Router (`app/`)
 - Backend/API: Implementación separada; para despliegue y detalles consulta su README
 
-Si usas dominios distintos para frontend y API, ajusta CORS y cookies en la API.
+Si usas dominios distintos para frontend y API, ajusta cors.php en la Api de la siguiente manera.
+
+```bash
+# Mas seguro especificando dominios
+'allowed_origins' => ['https://example.com']
+# Menos seguro y es el valor por default
+'allowed_origins' => ['*']
+```
 
 ### 3) Variables de entorno
 
@@ -101,7 +108,6 @@ cp .env.example env.production
 2. Abre `env.production` y actualiza las variables necesarias, por ejemplo:
 
 - NEXT_PUBLIC_API_URL='URL base de la API (ej. https://api.example.com)'
-- NEXT_PUBLIC_COOKIE_NAME='Nombre de la cookie que debe coincidir con el de la API'
 - NEXT_PUBLIC_TITLE_PAGE='Nombre de la plataforma'
 - NEXT_PUBLIC_STORAGE_KEY='llave-poderosa-local'
 
@@ -311,4 +317,3 @@ La API está implementada por separado; para el despliegue, configuración y dep
 ### 6) Consideraciones de producción
 
 - CORS: si frontend y API están en distinto dominio, configura CORS en la API
-- Cookies y seguridad: usa secure cookies y el dominio correcto para producción

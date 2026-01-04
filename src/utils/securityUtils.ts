@@ -32,41 +32,34 @@ export const decryptData = (encryptedData: string, maxAge: number = 24 * 60 * 60
         
         // Verificar edad de los datos
         if (Date.now() - timestamp > maxAge) {
-            console.warn('Permisos expirados, requiere re-autenticación');
             return null;
         }
         
         // Verificar integridad básica
         const expectedChecksum = btoa(JSON.stringify(data) + SECRET_KEY + timestamp);
         if (checksum !== expectedChecksum) {
-            console.warn('Datos de permisos corruptos o manipulados');
             return null;
         }
         
         return data;
     } catch (error) {
-        console.error('Error al descifrar permisos:', error);
         return null;
     }
 };
 
 /**
- * Almacena permisos de forma segura
+ * Almacena datos de sesión de forma segura (permisos, roles, token y user)
  */
-export const storePermissionsSecurely = (permissions: string[], roles: string[]): void => {
-    const data = { permissions, roles, sessionId: generateSessionId() };
+export const storeSessionData = (permissions: string[], roles: string[], token: string, user?: any): void => {
+    const data = { permissions, roles, token, user };
     const encrypted = encryptData(data);
     localStorage.setItem('user_session_data', encrypted);
-    
-    // Limpiar datos antiguos que podrían existir
-    localStorage.removeItem('user_permissions');
-    localStorage.removeItem('user_roles');
 };
 
 /**
- * Recupera permisos de forma segura
+ * Recupera datos de sesión de forma segura
  */
-export const getStoredPermissionsSecurely = (): { permissions: string[], roles: string[] } | null => {
+export const getStoredSessionData = (): { permissions: string[], roles: string[], token?: string, user?: any } | null => {
     const encrypted = localStorage.getItem('user_session_data');
     if (!encrypted) return null;
     
@@ -79,8 +72,18 @@ export const getStoredPermissionsSecurely = (): { permissions: string[], roles: 
     
     return {
         permissions: data.permissions || [],
-        roles: data.roles || []
+        roles: data.roles || [],
+        token: data.token,
+        user: data.user
     };
+};
+
+/**
+ * Recupera el token de sesión almacenado
+ */
+export const getStoredToken = (): string | null => {
+    const data = getStoredSessionData();
+    return data?.token || null;
 };
 
 /**
@@ -88,16 +91,7 @@ export const getStoredPermissionsSecurely = (): { permissions: string[], roles: 
  */
 export const clearSessionData = (): void => {
     localStorage.removeItem('user_session_data');
-    localStorage.removeItem('user_permissions');
-    localStorage.removeItem('user_roles');
     sessionStorage.clear();
-};
-
-/**
- * Genera un ID de sesión único
- */
-const generateSessionId = (): string => {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
 /**
