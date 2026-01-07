@@ -1,39 +1,37 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Rutas protegidas (puedes ajustar el patrón según tus necesidades)
-const publicPaths = ['/api/auth/login','/api/auth/register','/api/auth/forgot-password','/auth/login','/auth/register', '/auth/forgot-password', '/sanctum/csrf-cookie'];
+// Rutas públicas (no requieren autenticación)
+const publicPaths = ['/api/auth/login','/api/auth/register','/api/auth/forgot-password','/auth/login','/auth/register', '/auth/forgot-password'];
+
+// Rutas que no deben ser interceptadas por el middleware
+const excludedPaths = ['/_next', '/favicon.ico', '/themes', '/layout', '/assets'];
 
 export function middleware(request: NextRequest) {
-    const { cookies, nextUrl } = request;
-    if (
-        nextUrl.pathname.startsWith('/_next') ||
-        nextUrl.pathname.startsWith('/favicon.ico') ||
-        nextUrl.pathname.startsWith('/themes') ||
-        nextUrl.pathname.startsWith('/layout') ||
-        nextUrl.pathname.startsWith('/assets') // Permite el acceso a la ruta CSRF de NextAuth
-    ) {
+    const { nextUrl } = request;
+
+    // Permitir acceso a rutas excluidas (estáticos, etc.)
+    if (excludedPaths.some(path => nextUrl.pathname.startsWith(path))) {
         return NextResponse.next();
     }
-    // Verifica si la cookie de sesión existe
-    const isAuthenticated = cookies.get('apideic_session'); // O el nombre de tu cookie de sesión
 
-    // Verifica si la ruta es pública
-
+    // Verificar si la ruta es pública
     const isPublic = publicPaths.includes(nextUrl.pathname);
 
-    // Si es endpoint de API y no autenticado, responde 401 JSON
-    if (nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
-        return NextResponse.json({ error: 'Unauthorized desde nextjs middleware' }, { status: 401 });
+    // Para rutas de API: dejar que el backend maneje la autenticación via tokens
+    if (nextUrl.pathname.startsWith('/api')) {
+        return NextResponse.next();
     }
 
-
-   if (!nextUrl.pathname.startsWith('/api') && !isPublic && !isAuthenticated) {
-        //Redirige a login si no hay sesión
-        return NextResponse.redirect(new URL('/auth/login', request.url));
+    // Para rutas del frontend: la autenticación se maneja en el cliente (SessionGuard)
+    // No verificamos cookies ya que usamos tokens API
+    if (!isPublic) {
+        // Podrías agregar lógica adicional aquí si es necesario
+        // Por ahora, permitimos el acceso y dejamos que el cliente verifique
+        return NextResponse.next();
     }
 
-    // Permite el acceso si hay sesión o la ruta no es protegida
+    // Permitir acceso a rutas públicas
     return NextResponse.next();
 }
 

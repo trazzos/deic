@@ -36,8 +36,7 @@ export const SessionGuard: React.FC<SessionGuardProps> = ({ children }) => {
 
     // Handler para redirección (memoizado)
     const handleRedirectToLogin = useCallback(() => {
-        console.log('🔒 Usuario no autenticado, redirigiendo a login...');
-        
+      
         // Guardar la ruta actual para redirigir después del login
         const currentPath = pathname !== '/' ? pathname : '';
         if (currentPath) {
@@ -53,7 +52,7 @@ export const SessionGuard: React.FC<SessionGuardProps> = ({ children }) => {
         if (!initialized) {
             return;
         }
-
+        
         setIsCheckingAuth(false);
 
         // Si estamos en una ruta pública, no validar autenticación
